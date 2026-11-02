@@ -50,6 +50,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 
+sys.path.insert(0, str(HERE))
+import klayout_bin  # noqa: E402  (pins a deck-compatible KLayout)
+
 PI = 3.141592653589793
 FREQ = 1.0e6
 
@@ -217,7 +220,8 @@ def build_gds(out: Path, spec: dict, sizes: dict) -> Path:
     env = dict(os.environ)
     env.update({"OUT": str(gds), "WN": str(sizes["wn"]), "WP": str(sizes["wp"]),
                 "L": str(sizes["l"])})
-    proc = run(["klayout", "-b", "-r", str(HERE / spec["script"])], env=env)
+    proc = run([os.environ.get("KLAYOUT_BUILD", "klayout"),
+                "-b", "-r", str(HERE / spec["script"])], env=env)
     if proc.returncode != 0 or not gds.is_file():
         raise RuntimeError(f"layout build failed\n{proc.stdout}{proc.stderr}")
     return gds
@@ -245,7 +249,7 @@ def drc(gds: Path, pdk: Path, out: Path, topcell: str, tag: str) -> list[dict]:
         raise FileNotFoundError(deck)
     report = out / f"drc_{tag}.lyrdb"
     report.unlink(missing_ok=True)
-    proc = run(["klayout", "-b", "-r", str(deck),
+    proc = run([klayout_bin.find(), "-b", "-r", str(deck),
                 "-rd", f"input={gds}", "-rd", f"report={report}",
                 "-rd", f"topcell={topcell}", "-rd", "thr=4",
                 "-rd", "feol=true", "-rd", "beol=true"])
