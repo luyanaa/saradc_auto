@@ -42,7 +42,7 @@ traceback.
 | sky130A_hd | our `SARADC_CAP_UNIT`, `SARADC_SW_TG` | 0 items | match | 6 / 14 caps |
 | ihp-sg13g2 | `sg13g2_inv_1` | 0 items | Netlists match | 6 caps, 2 devices |
 | gf180mcuD | `gf180mcu_fd_sc_mcu7t5v0__inv_1` | 2 leaf rules left | **don't match** | 15 caps, 2 devices |
-| ics55_LLSC_H7CH | `INVX1H7H` | 5 items | not run | Magic tech present |
+| ics55_LLSC_H7CH | `INVX1H7H` | 5 items (context) | **PASS** | 2 dev / 13 caps, 100x scale bug |
 
 ## Commands that work
 
@@ -124,7 +124,12 @@ The open item is LVS. Triage so far:
 
 The deck's own LVS testcases cannot be used as a control: the files under
 `libs.tech/klayout/tech/lvs/testing/` are Git LFS pointers (824 bytes), not
-GDS, so nothing to run.
+GDS, so nothing to run. `gf180mcu.lvs` also has
+`# %include rule_decks/substrate_connections.lvs` commented out, so it does
+not tie wells by itself. A netgen self-compare of the Magic netlist against
+itself reports "Circuits match uniquely", so the PDK netgen setup is sound;
+the failure is specific to the CDL's six-pin well abstraction against a
+tap-less cell.
 
 So gf180 is not a layout defect: it is a choice of cell-level abstraction.
 Either compare against a 5-pin schematic that uses `SUB` for both bulks, or
@@ -149,7 +154,29 @@ KLAYOUT -b -r libs.tech/drc/ics55_drc.drc \
 
 Result: 1 x `MET1_A_1` (M1 area >= 0.042 um^2) at a 0.18 x 0.15 um island, and
 4 x `M1DUM_W_1` markers whose reported geometry is empty. The empty markers
-look like a deck bookkeeping rule rather than geometry. LVS/PEX not run yet.
+look like a deck bookkeeping rule rather than geometry; `ics55_rules.json`
+describes them as the permitted metal-dummy rectangle sizes, so they are
+informational. The M1 area item is a cell-boundary context rule: the island
+abuts neighbouring cells in a row.
+
+LVS passes:
+
+```
+python3 run_lvs.py --layout INVX1H7H.gds --top INVX1H7H \
+    --netlist ics55_LLSC_H7CH.cdl --klayout <0.30.12> --report lvs.lvsdb
+# ICS55_LVS_COMPARE=PASS / CONGRATULATIONS! Netlists match.
+```
+
+`--no-well-ties` must **not** be used for a leaf cell here. With it, the nmos
+bulk is extracted as an internal net (`$6`) and the comparison fails; without
+it the deck ties bulks to VSS/VDD globally and the netlists match.
+
+PEX via Magic's ics55 tech runs (2 devices + 13 caps) but is **not usable
+yet**: the extracted devices come out `w=21u l=6u` where the cell is
+0.21/0.06 um, i.e. 100x too large, and the caps scale with the area. The tech
+declares `lambda=0.001` and `scalefactor 1` (1 DBU = 1 nm), so Magic's
+ext2spice dimension convention is off by 100. `ext2spice scale off` does not
+change it. Fix the lambda convention before quoting any ics55 capacitance.
 
 ## Next steps, in order
 
