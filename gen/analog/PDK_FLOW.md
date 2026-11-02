@@ -237,7 +237,10 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   a 0.16 contact and a met1 pad, plus a `ptap1` tap 1.2 um away. The result
   clears the IHP DRC deck with **0 items** (bare `nmos` has 1, LU.b; the
   first strap attempt had 19, all spacing/enclosure, fixed by moving the pad
-  clear of the active and the diffusion met1).
+  clear of the active and the diffusion met1). The same script with
+  `KIND=pmos` gives the PMOS leaf, also 0 items. Metal1 pin labels (GDS 8/2)
+  make D/G/S/B ports, and both leaves pass netgen LVS (`Circuits match
+  uniquely`) and Magic PEX (1 device, 6 caps for the NMOS).
 - **gf180mcu**: `libs.ref/gf180mcu_fd_pr/gds/` ships only BJTs, PNPs and an
   efuse; there is no MOS GDS. Devices must come from Magic's
   `gf180mcuD.tcl` generator or from the stdcell library's internal devices.

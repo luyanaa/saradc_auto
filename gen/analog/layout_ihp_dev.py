@@ -29,6 +29,7 @@ import pya
 IHP_ROOT = os.environ.get("IHP_ROOT") or glob.glob(
     os.path.expanduser("~/.ciel/ciel/ihp-sg13/versions/*/ihp-sg13g2"))[0]
 OUT = os.environ.get("OUT", "/tmp/adcgen/flow/ihp/leaf_nmos.gds")
+KIND = os.environ.get("KIND", "nmos")
 
 POLY = (5, 0)
 MCON = (6, 0)
@@ -39,11 +40,11 @@ TAP_DX_UM = 1.2
 def build(src: str, out: str) -> None:
     ly = pya.Layout()
     ly.read(src)
-    dev = ly.cell("nmos")
-    tap = ly.cell("ptap1")
+    dev = ly.cell(KIND)
+    tap = ly.cell("ntap1" if KIND == "pmos" else "ptap1")
     if dev is None or tap is None:
-        raise SystemExit("nmos/ptap1 not found in the pr GDS")
-    top = ly.create_cell("leaf_nmos")
+        raise SystemExit(f"{KIND}/tap not found in the pr GDS")
+    top = ly.create_cell(f"leaf_{KIND}")
     top.insert(pya.CellInstArray(dev, pya.Trans()))
     top.insert(pya.CellInstArray(tap, pya.Trans(pya.Vector(int(TAP_DX_UM * 1000), 0))))
 
@@ -58,6 +59,13 @@ def build(src: str, out: str) -> None:
     box(poly, 0.31, 0.45, 0.61, 0.75)
     box(mcon, 0.38, 0.52, 0.54, 0.68)
     box(m1, 0.34, 0.48, 0.58, 0.72)
+
+    # metal1 pin labels (GDS 8/2) so Magic makes ports for LVS
+    lab = ly.layer(8, 2)
+    for text, x, y in (("S", 0.15, 0.15), ("D", 0.72, 0.15),
+                       ("G", 0.46, 0.60), ("B", 1.59, 0.39)):
+        top.shapes(lab).insert(pya.Text(text, pya.Trans(
+            pya.Vector(int(x * 1000), int(y * 1000)))))
 
     ly.write(out)
     print(f"wrote {out}  cell={top.name}  bbox={top.bbox().to_s()}")
