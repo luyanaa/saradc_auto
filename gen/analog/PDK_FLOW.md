@@ -254,10 +254,11 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   poly 30/0, contact 33/0, metal1 34/0 (label 34/10), pwell 204/0, N implant
   32/0, plus a p+ tap (active + 31/0) for the latch-up rule. Every vertex is
   snapped to the 5 nm grid. The deck reports **0 items** with
-  `decks=all,-density`. Magic extracts it as `nfet_03v3 w=1.6u l=0.6u`, but
-  the gate and bulk come out as internal nets while the G/B labels sit on
-  their metal1 pads - so the poly and pwell contacts are not being recognised
-  and LVS is not passing yet.
+  `decks=all,-density`. Magic extracts it as `nfet_03v3 w=1.6u l=0.6u`.
+  The gate contact was not recognised as `pc` with a 0.34 um metal1 pad;
+  growing every metal1 pad to 0.5 um makes the gate connect
+  (`X0 D G S a_440_80#`). The p+ tap is still separate (`B` stays an m1-only
+  node), so the bulk is not exposed and LVS is not passing yet.
 - **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
   installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
   `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell

@@ -52,17 +52,17 @@ def build() -> None:
     # source / drain / gate contacts (0.22) and met1 pads
     for cx in (X0 + 0.22, X0 + GX1 + 0.28):
         box(CT, cx - 0.11, Y0 + ACT_H / 2 - 0.11, cx + 0.11, Y0 + ACT_H / 2 + 0.11)
-        box(M1, cx - 0.2, Y0 + ACT_H / 2 - 0.2, cx + 0.2, Y0 + ACT_H / 2 + 0.2)
+        box(M1, cx - 0.25, Y0 + ACT_H / 2 - 0.25, cx + 0.25, Y0 + ACT_H / 2 + 0.25)
     gx = X0 + (GX0 + GX1) / 2
     gy = Y0 + ACT_H + 0.3
     box(CT, gx - 0.11, gy - 0.11, gx + 0.11, gy + 0.11)
-    box(M1, gx - 0.2, gy - 0.2, gx + 0.2, gy + 0.2)
+    box(M1, gx - 0.25, gy - 0.25, gx + 0.25, gy + 0.25)
 
     # substrate tap: p+ active with a contact to metal1
     box(ACT, 2.2, 0.4, 3.2, 1.2)
     box(IMP31, 2.0, 0.2, 3.4, 1.4)
     box(CT, 2.59, 0.69, 2.81, 0.91)
-    box(M1, 2.5, 0.6, 2.9, 1.0)
+    box(M1, 2.45, 0.55, 2.95, 1.05)
     top.shapes(ly.layer(*LBL)).insert(pya.Text("B", pya.Trans(
         pya.Vector(2950, 1100))))
 
