@@ -1,0 +1,28 @@
+{
+  "design": "sar8_gf180mcu_5v",
+  "arch": "sar",
+  "pdk": "gf180mcu_fd_7t5v0",
+  "scl": "gf180mcu_fd_sc_mcu7t5v0",
+  "resolution": 8,
+  "vdd": 5.0,
+  "fs_hz": 250000,
+  "dnl_target_lsb": 0.5,
+  "input": { "mode": "differential", "vfs": 5.0 },
+  "cdac": {
+    "backend": "binary",
+    "cap": "sm141064_mim",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": { "backend": "strongarm", "trim_bits": 2 },
+  "sampling": { "backend": "bootstrapped" },
+  "logic": { "timing": "sync", "osr": 1, "averaging": 1 },
+  "calibration": { "offset": false, "gain": false, "weights": false },
+  "physical": {
+    "array": "common_centroid",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": { "require": ["behavioral", "lvs", "drc", "pex", "fft"] }
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/adc_gen/spec.schema.json",
+  "title": "ADC generator specification",
+  "description": "One spec drives every architecture and every PDK. No process name may appear below pdk/scl.",
+  "type": "object",
+  "required": ["design", "arch", "pdk", "scl", "resolution", "vdd", "fs_hz", "input"],
+  "properties": {
+    "design": { "type": "string", "minLength": 1 },
+    "arch": { "enum": ["sar", "ramp", "sdm", "vco"] },
+    "pdk": { "type": "string", "minLength": 1 },
+    "scl": { "type": "string", "minLength": 1 },
+    "resolution": { "type": "integer", "minimum": 4, "maximum": 16 },
+    "vdd": { "type": "number", "exclusiveMinimum": 0 },
+    "fs_hz": { "type": "number", "exclusiveMinimum": 0 },
+    "dnl_target_lsb": { "type": "number", "exclusiveMinimum": 0, "default": 0.5 },
+    "input": {
+      "type": "object",
+      "required": ["mode", "vfs"],
+      "properties": {
+        "mode": { "enum": ["single_ended", "differential"] },
+        "vfs": { "type": "number", "exclusiveMinimum": 0 },
+        "vcm": { "type": "number" }
+      }
+    },
+    "cdac": {
+      "type": "object",
+      "required": ["backend", "cap"],
+      "properties": {
+        "backend": { "enum": ["binary", "split", "segmented", "monotonic", "nonbinary"] },
+        "cap": { "type": "string" },
+        "cu_ff": { "oneOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "const": "auto" }], "default": "auto" },
+        "sampling": { "enum": ["bottom_plate", "top_plate"], "default": "bottom_plate" },
+        "segments": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+        "redundancy_bits": { "type": "number", "minimum": 0 }
+      }
+    },
+    "comparator": {
+      "type": "object",
+      "required": ["backend"],
+      "properties": {
+        "backend": { "enum": ["strongarm", "double_tail", "preamp_latch", "static"] },
+        "trim_bits": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "required": ["backend"],
+      "properties": {
+        "backend": { "enum": ["transmission_gate", "bootstrapped"] }
+      }
+    },
+    "logic": {
+      "type": "object",
+      "properties": {
+        "timing": { "enum": ["sync", "async"], "default": "sync" },
+        "osr": { "type": "integer", "minimum": 1, "default": 1 },
+        "averaging": { "type": "integer", "minimum": 1, "default": 1 }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "properties": {
+        "offset": { "type": "boolean", "default": false },
+        "gain": { "type": "boolean", "default": false },
+        "weights": { "type": "boolean", "default": false },
+        "background": { "type": "boolean", "default": false }
+      }
+    },
+    "physical": {
+      "type": "object",
+      "properties": {
+        "array": { "enum": ["row", "common_centroid"], "default": "common_centroid" },
+        "dummies": { "type": "boolean", "default": true },
+        "guard_ring": { "type": "boolean", "default": true },
+        "pex": { "type": "boolean", "default": true }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "require": {
+          "type": "array",
+          "items": { "enum": ["behavioral", "lvs", "drc", "pex", "fft", "pvt"] }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

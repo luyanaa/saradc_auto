@@ -1,0 +1,52 @@
+{
+  "design": "sar8_sky130",
+  "arch": "sar",
+  "pdk": "sky130A_hd",
+  "scl": "sky130_fd_sc_hd",
+  "resolution": 8,
+  "vdd": 1.8,
+  "fs_hz": 1000000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "differential",
+    "vfs": 1.8
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 3
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 1,
+    "averaging": 1
+  },
+  "calibration": {
+    "offset": false,
+    "gain": false,
+    "weights": false
+  },
+  "physical": {
+    "array": "common_centroid",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex",
+      "fft"
+    ]
+  }
+}

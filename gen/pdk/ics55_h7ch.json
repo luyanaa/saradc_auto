@@ -1,0 +1,110 @@
+{
+  "id": "ics55_h7ch",
+  "family": "ics55",
+  "name": "ICsprout55 H7CH 7-track (1.2V core)",
+  "vdd": 1.2,
+  "vdd_tolerance": 0.1,
+  "site": {
+    "name": "core7",
+    "width_um": 0.2,
+    "height_um": 1.4
+  },
+  "routing_layers": [
+    "MET1",
+    "MET2",
+    "MET3",
+    "MET4",
+    "MET5",
+    "RV",
+    "RDL"
+  ],
+  "supply_nets": {
+    "vdd": "VDD",
+    "vss": "VSS"
+  },
+  "stdcell": {
+    "lib": "/grid/icsprout55-pdk/libs.ref/ics55_LLSC_H7CH/liberty/ics55_LLSC_H7CH_typ_tt_1p2_25_nldm.lib",
+    "lef": "/grid/icsprout55-pdk/libs.ref/ics55_LLSC_H7CH/lef/ics55_LLSC_H7CH.lef",
+    "tech_lef": "/grid/icsprout55-pdk/prtech/techLEF/N551P6M_ecos.lef"
+  },
+  "devices": {
+    "nmos": "nm1p2_hvt_lp_core",
+    "pmos": "pm1p2_hvt_lp_core"
+  },
+  "cap_options": [
+    {
+      "name": "mom",
+      "kind": "mom",
+      "density_ff_um2": 0.5,
+      "ac_pct_um": 0.8,
+      "min_geom_area_um2": 0.3,
+      "source": "assumption",
+      "notes": "vendor MOM subcircuit at libs.tech/spice/foundry/ngspice/mom/mom.ckt; density/Pelgrom are estimates"
+    },
+    {
+      "name": "moscap",
+      "kind": "moscap",
+      "density_ff_um2": 5.0,
+      "ac_pct_um": 1.5,
+      "min_geom_area_um2": 0.2,
+      "source": "assumption",
+      "notes": "1.2V core oxide, highest density, non-linear C(V)"
+    }
+  ],
+  "c_parasitic_est_ff": 10.0,
+  "switches": {
+    "transmission_gate": {
+      "ron_ohm": 220.0,
+      "source": "assumption"
+    },
+    "bootstrapped": {
+      "ron_ohm": 60.0,
+      "source": "assumption"
+    }
+  },
+  "comparator": {
+    "strongarm": {
+      "sigma_uv": 1200.0,
+      "delay_ns": 0.25,
+      "source": "assumption"
+    },
+    "double_tail": {
+      "sigma_uv": 700.0,
+      "delay_ns": 0.4,
+      "source": "assumption"
+    },
+    "preamp_latch": {
+      "sigma_uv": 200.0,
+      "delay_ns": 0.8,
+      "source": "assumption"
+    }
+  },
+  "sim": {
+    "ngspice_deck": "/grid/icsprout55-pdk/libs.tech/spice/foundry/ngspice/ICsprout_55LLULP1225_V1p1_hsp.lib",
+    "xyce_deck": null,
+    "osdi_required": false,
+    "license_note": "vendor model data, educational/research evaluation only; not released PDK collateral and not usable for signoff or production"
+  },
+  "signoff": {
+    "magicrc": "/grid/icsprout55-pdk/libs.tech/magic/ics55.magicrc",
+    "klayout_dir": "/grid/icsprout55-pdk/libs.tech/klayout",
+    "pex": "kpex"
+  },
+  "digital_ceiling_mhz": 479.0,
+  "digital_ceiling_source": "adpll_gen pdk_profiles.json ics55 signoff_mhz (PEX-cap + sparse L3; no PVT/jitter signoff)",
+  "maturity": "LibreLane config and magic tech present; 1.4um rows; vendor models are evaluation-only",
+  "qualified": false,
+  "default_cap": "mom",
+  "analog": {
+    "status": "scaffold",
+    "style": "subckt",
+    "finger_param": "fingers",
+    "sizing_um": {
+      "wn": 0.1,
+      "wp": 0.2,
+      "l": 0.06
+    },
+    "cap_backend": "mom",
+    "notes": "vendor model cards are evaluation-only; device subckt binding unverified"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "design": "sar8_ics55",
+  "arch": "sar",
+  "pdk": "ics55_h7ch",
+  "scl": "ics55_LLSC_H7CH",
+  "resolution": 8,
+  "vdd": 1.2,
+  "fs_hz": 1000000,
+  "dnl_target_lsb": 0.5,
+  "input": { "mode": "differential", "vfs": 1.2 },
+  "cdac": {
+    "backend": "binary",
+    "cap": "mom",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": { "backend": "strongarm", "trim_bits": 3 },
+  "sampling": { "backend": "bootstrapped" },
+  "logic": { "timing": "sync", "osr": 1, "averaging": 1 },
+  "calibration": { "offset": false, "gain": false, "weights": false },
+  "physical": {
+    "array": "common_centroid",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": { "require": ["behavioral", "lvs", "drc", "pex", "fft"] }
+}

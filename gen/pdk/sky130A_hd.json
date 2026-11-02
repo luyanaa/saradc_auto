@@ -1,0 +1,304 @@
+{
+  "id": "sky130A_hd",
+  "family": "sky130",
+  "name": "SkyWater sky130A / sky130_fd_sc_hd",
+  "vdd": 1.8,
+  "vdd_tolerance": 0.1,
+  "site": {
+    "name": "unithd",
+    "width_um": 0.46,
+    "height_um": 2.72
+  },
+  "routing_layers": [
+    "li1",
+    "met1",
+    "met2",
+    "met3",
+    "met4",
+    "met5"
+  ],
+  "supply_nets": {
+    "vdd": "VPWR",
+    "vss": "VGND"
+  },
+  "stdcell": {
+    "lib": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib",
+    "lef": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef",
+    "tech_lef": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef"
+  },
+  "devices": {
+    "nmos": "sky130_fd_pr__nfet_01v8",
+    "pmos": "sky130_fd_pr__pfet_01v8"
+  },
+  "cap_options": [
+    {
+      "name": "moscap",
+      "kind": "moscap",
+      "density_ff_um2": 4.243,
+      "density_typ_ff_um2": 5.979,
+      "ac_pct_um": 1.0,
+      "min_geom_area_um2": 0.63,
+      "source": "density measured, mismatch assumed",
+      "measurement": {
+        "deck": "sky130 corners/tt.spice flattened, nfet_01v8 + pfet_01v8",
+        "geometry_um": {
+          "wn": 1.4,
+          "wp": 2.8,
+          "l": 0.15,
+          "n_parallel": 1
+        },
+        "area_um2": 0.6299999999999999,
+        "vcm_v": 0.9,
+        "c_ff_vs_vdiff": {
+          "-0.6": 4.821,
+          "-0.5": 4.53,
+          "-0.4": 3.829,
+          "-0.3": 3.065,
+          "-0.2": 2.75,
+          "-0.1": 2.68,
+          "0.0": 2.673,
+          "0.1": 2.681,
+          "0.2": 2.73,
+          "0.3": 2.959,
+          "0.4": 3.427,
+          "0.5": 3.7,
+          "0.6": 3.802
+        },
+        "c_typ_ff": 3.767,
+        "c_flatband_min_ff": 2.673,
+        "note": "C is bias dependent: flat band collapses to 71% of the inversion/accumulation value. density_ff_um2 stores the flat-band minimum so array sizing stays conservative; density_typ_ff_um2 is the usable value. A_C could not be extracted: the PDK oxide-mismatch term gave zero spread in AC analysis, so ac_pct_um is still an estimate."
+      }
+    },
+    {
+      "name": "vpp_mom",
+      "kind": "mom",
+      "density_ff_um2": 0.6,
+      "ac_pct_um": 1.0,
+      "min_geom_area_um2": 0.5,
+      "source": "assumption",
+      "notes": "sky130_fd_pr__cap_vpp_*; density and Pelgrom coefficient are engineering estimates, replace with measured data from a cap test structure"
+    },
+    {
+      "name": "mim",
+      "kind": "mim",
+      "density_ff_um2": 2.0,
+      "ac_pct_um": 0.3,
+      "min_geom_area_um2": 4.0,
+      "source": "assumption",
+      "notes": "sky130 MIM deck; verify availability and DRC rules for the selected metal stack"
+    }
+  ],
+  "c_parasitic_est_ff": 20.0,
+  "switches": {
+    "transmission_gate": {
+      "ron_ohm": 1551.7,
+      "source": "measured",
+      "ron_typ_ohm": 576.2,
+      "ron_min_ohm": 631.2,
+      "measurement": {
+        "deck": "sky130 corners/tt.spice flattened",
+        "geometry_um": {
+          "wn": 1.4,
+          "wp": 2.8,
+          "l": 0.15
+        },
+        "vdd": 1.8,
+        "method": "10 mV across the closed TG at Vg=rail, 11 input points",
+        "note": "4x width. ron_ohm is the worst point over the input range, at mid-rail where both devices have minimum overdrive. Widening 4x cut Ron from 6393 to 1170 ohm and raised the off-capacitance at the DAC node from 1.16 to 4.63 fF; that is the trade recorded in width_study.",
+        "curve": [
+          {
+            "vin_v": 0.27,
+            "ron_ohm": 142.4207
+          },
+          {
+            "vin_v": 0.4275,
+            "ron_ohm": 175.8481
+          },
+          {
+            "vin_v": 0.585,
+            "ron_ohm": 240.5047
+          },
+          {
+            "vin_v": 0.7425,
+            "ron_ohm": 405.7696
+          },
+          {
+            "vin_v": 0.9,
+            "ron_ohm": 1124.0675
+          },
+          {
+            "vin_v": 1.0575,
+            "ron_ohm": 1551.6578
+          },
+          {
+            "vin_v": 1.215,
+            "ron_ohm": 731.9835
+          },
+          {
+            "vin_v": 1.3725,
+            "ron_ohm": 465.9717
+          },
+          {
+            "vin_v": 1.53,
+            "ron_ohm": 347.8341
+          }
+        ]
+      },
+      "geometry_um": {
+        "wn": 5.6,
+        "wp": 11.2,
+        "l": 0.15
+      },
+      "c_off_ff": 4.63,
+      "width_study": [
+        {
+          "mult": 1,
+          "wn": 1.4,
+          "wp": 2.8,
+          "ron_max_ohm": 6393.0,
+          "c_off_ff": 1.16
+        },
+        {
+          "mult": 2,
+          "wn": 2.8,
+          "wp": 5.6,
+          "ron_max_ohm": 2589.0,
+          "c_off_ff": 2.32
+        },
+        {
+          "mult": 4,
+          "wn": 5.6,
+          "wp": 11.2,
+          "ron_max_ohm": 1170.0,
+          "c_off_ff": 4.63
+        },
+        {
+          "mult": 8,
+          "wn": 11.2,
+          "wp": 22.4,
+          "ron_max_ohm": 594.0,
+          "c_off_ff": 9.27
+        }
+      ]
+    },
+    "bootstrapped": {
+      "ron_ohm": 5859.0,
+      "source": "measured",
+      "status": "measured_not_selected",
+      "overdrive_min_v": 0.91,
+      "measurement": {
+        "deck": "sky130 corners/tt.spice flattened",
+        "geometry_um": {
+          "wn": 5.6,
+          "wp": 11.2,
+          "l": 0.15,
+          "cboot_ff": 100.0
+        },
+        "method": "transient, 50 uA load, gate and output sampled inside the sampling window",
+        "curve": {
+          "Vin": [
+            0.27,
+            0.9,
+            1.53
+          ],
+          "Vg": [
+            1.73,
+            2.12,
+            2.15
+          ],
+          "overdrive": [
+            1.46,
+            1.23,
+            0.91
+          ],
+          "Ron": [
+            153,
+            259,
+            5859
+          ]
+        },
+        "verdict": "bootstraps, but the lift is incomplete: the gate reaches ~2.2 V where VDD+Vin would be 3.3 V, so overdrive collapses at high input and Ron reaches 5.9 kohm at 4x width. Worse than a 4x TG (1.55 kohm) while costing 8 devices and two floating wells. Not selected for v1.",
+        "open_items": [
+          "full VDD+Vin lift (gate driver / clock bootstrapping)",
+          "boot-node keeper: the sampled gate droops ~20 mV/ns"
+        ]
+      }
+    }
+  },
+  "comparator": {
+    "strongarm": {
+      "sigma_uv": 1000.0,
+      "delay_ns": 0.101,
+      "source": "offset+delay measured, noise assumed",
+      "offset_uv": 546.9,
+      "measurement": {
+        "deck": "sky130 corners/tt.spice flattened",
+        "geometry_um": {
+          "wn": 1.4,
+          "wp": 2.8,
+          "l": 0.15
+        },
+        "vdd": 1.8,
+        "method": "bisection on the decision over +-40 mV, 9 iterations",
+        "note": "systematic offset only; mismatch was not measurable, so this is not an offset distribution"
+      }
+    },
+    "double_tail": {
+      "sigma_uv": 600.0,
+      "delay_ns": 0.7,
+      "source": "assumption"
+    },
+    "preamp_latch": {
+      "sigma_uv": 150.0,
+      "delay_ns": 1.5,
+      "source": "assumption"
+    }
+  },
+  "sim": {
+    "ngspice_deck": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.tech/ngspice/sky130.lib.spice",
+    "xyce_deck": null,
+    "osdi_required": false
+  },
+  "signoff": {
+    "magicrc": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.tech/magic/sky130A.magicrc",
+    "klayout_dir": "~/.ciel/ciel/sky130/versions/8afc8346a57fe1ab7934ba5a6056ea8b43078e71/sky130A/libs.tech/klayout",
+    "pex": "kpex"
+  },
+  "digital_ceiling_mhz": 300.0,
+  "digital_ceiling_source": "adpll_gen pdk_profiles.json signoff_mhz (pre-layout, unqualified)",
+  "maturity": "pre-layout digital canary; no post-route signoff; cap data uncharacterized in this profile",
+  "qualified": false,
+  "default_cap": "moscap",
+  "analog": {
+    "status": "supported",
+    "style": "subckt",
+    "finger_param": "nf",
+    "sizing_um": {
+      "wn": 1.4,
+      "wp": 2.8,
+      "l": 0.15
+    },
+    "body": {
+      "nmos": "vss",
+      "pmos": "vdd"
+    },
+    "cap_backend": "moscap",
+    "notes": "device names and nf finger param match sky130_fd_pr; smoke models are level-1 (see analog/README)",
+    "switch_sizing_um": {
+      "wn": 5.6,
+      "wp": 11.2,
+      "l": 0.15
+    },
+    "switch_sizing_note": "4x the minimum width: measured Ron max drops from 6393 to 1170 ohm, which is what closes 10 MS/s at 684 fF. Off capacitance at the DAC node rises 1.16 -> 4.63 fF, still small against the 20 fF top-plate estimate.",
+    "switch_choice": {
+      "selected": "transmission_gate",
+      "sizing_um": {
+        "wn": 5.6,
+        "wp": 11.2,
+        "l": 0.15
+      },
+      "reason": "4x TG closes 10 MS/s at 684 fF with 1.65x margin; the bootstrap leaf is measured but not competitive yet",
+      "evidence": "switches.transmission_gate.width_study and switches.bootstrapped.measurement"
+    }
+  }
+}

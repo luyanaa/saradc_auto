@@ -1,0 +1,108 @@
+{
+  "id": "gf180mcu_as_7t3v3",
+  "family": "gf180mcu",
+  "name": "GlobalFoundries gf180mcu 3.3V AS 7-track (gf180mcu_as_sc_mcu7t3v3)",
+  "vdd": 3.3,
+  "vdd_tolerance": 0.1,
+  "site": {
+    "name": "unithd",
+    "width_um": 0.56,
+    "height_um": 3.92
+  },
+  "routing_layers": [
+    "Metal1",
+    "Metal2",
+    "Metal3",
+    "Metal4",
+    "Metal5"
+  ],
+  "supply_nets": {
+    "vdd": "VDD",
+    "vss": "VSS"
+  },
+  "stdcell": {
+    "lib": "/grid/gf180mcu/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3/lib/gf180mcu_as_sc_mcu7t3v3__tt_025C_3v30.lib",
+    "lef": "/grid/gf180mcu/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3/lef/gf180mcu_as_sc_mcu7t3v3.lef",
+    "tech_lef": "/grid/gf180mcu/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3/techlef/gf180mcu_as_sc_mcu7t3v3__nom.tlef"
+  },
+  "devices": {
+    "nmos": "gf180mcu_fd_pr__nfet_03v3",
+    "pmos": "gf180mcu_fd_pr__pfet_03v3"
+  },
+  "cap_options": [
+    {
+      "name": "mim_3v3",
+      "kind": "mim",
+      "density_ff_um2": 1.0,
+      "ac_pct_um": 0.4,
+      "min_geom_area_um2": 4.0,
+      "source": "assumption",
+      "notes": "gf180 MIM; confirm the 3.3V-compatible MIM stack in the selected metal option"
+    },
+    {
+      "name": "mom",
+      "kind": "mom",
+      "density_ff_um2": 0.4,
+      "ac_pct_um": 1.2,
+      "min_geom_area_um2": 1.0,
+      "source": "assumption",
+      "notes": "metal-finger MOM; no dedicated model card in the 3.3V AS library, must be extracted"
+    }
+  ],
+  "c_parasitic_est_ff": 25.0,
+  "switches": {
+    "transmission_gate": {
+      "ron_ohm": 150.0,
+      "source": "assumption"
+    },
+    "bootstrapped": {
+      "ron_ohm": 40.0,
+      "source": "assumption"
+    }
+  },
+  "comparator": {
+    "strongarm": {
+      "sigma_uv": 1500.0,
+      "delay_ns": 0.8,
+      "source": "assumption"
+    },
+    "double_tail": {
+      "sigma_uv": 900.0,
+      "delay_ns": 1.0,
+      "source": "assumption"
+    },
+    "preamp_latch": {
+      "sigma_uv": 250.0,
+      "delay_ns": 2.0,
+      "source": "assumption"
+    }
+  },
+  "sim": {
+    "ngspice_deck": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/design.ngspice",
+    "xyce_deck": null,
+    "osdi_required": false,
+    "deck_note": "the /grid 3.3V AS tree ships only librelane and xschem, no ngspice decks; the ciel gf180mcuD deck is reused and the 3.3V device section must be selected explicitly"
+  },
+  "signoff": {
+    "magicrc": null,
+    "klayout_dir": "/grid/gf180mcu/gf180mcu_as_sc_mcu7t3v3/pdk/libs.tech/klayout",
+    "pex": "kpex"
+  },
+  "digital_ceiling_mhz": 150.0,
+  "digital_ceiling_source": "adpll_gen pdk_profiles.json gf180mcu_as signoff_mhz (post-route SS canary)",
+  "maturity": "post-route digital canary at 3.3V; 3.3V-specific cap data not characterized",
+  "qualified": false,
+  "default_cap": "mim",
+  "analog": {
+    "status": "scaffold",
+    "style": "subckt",
+    "finger_param": "nf",
+    "sizing_um": {
+      "wn": 0.5,
+      "wp": 1.0,
+      "l": 0.28
+    },
+    "cap_backend": "mim",
+    "notes": "3.3V device subckt names are not verified in this checkout; generation fails closed"
+  }
+}

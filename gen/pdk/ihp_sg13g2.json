@@ -1,0 +1,114 @@
+{
+  "id": "ihp_sg13g2",
+  "family": "ihp-sg13g2",
+  "name": "IHP SG13G2 / sg13g2_stdcell (official, 1.2V core)",
+  "vdd": 1.2,
+  "vdd_tolerance": 0.1,
+  "site": {
+    "name": "CoreSite",
+    "width_um": 0.48,
+    "height_um": 3.78
+  },
+  "routing_layers": [
+    "Metal1",
+    "Metal2",
+    "Metal3",
+    "Metal4",
+    "Metal5",
+    "TopMetal1",
+    "TopMetal2"
+  ],
+  "supply_nets": {
+    "vdd": "VDD",
+    "vss": "VSS"
+  },
+  "stdcell": {
+    "lib": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib",
+    "lef": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.ref/sg13g2_stdcell/lef/sg13g2_stdcell.lef",
+    "tech_lef": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.ref/sg13g2_stdcell/lef/sg13g2_tech.lef"
+  },
+  "devices": {
+    "nmos": "sg13_lv_nmos",
+    "pmos": "sg13_lv_pmos"
+  },
+  "cap_options": [
+    {
+      "name": "mim",
+      "kind": "mim",
+      "density_ff_um2": 1.2,
+      "ac_pct_um": 0.25,
+      "min_geom_area_um2": 4.0,
+      "source": "assumption",
+      "notes": "MIM devices are in sg13g2_pr.gds; density/Pelgrom are estimates pending a cap characterization run"
+    },
+    {
+      "name": "moscap",
+      "kind": "moscap",
+      "density_ff_um2": 2.5,
+      "ac_pct_um": 1.5,
+      "min_geom_area_um2": 0.5,
+      "source": "assumption",
+      "notes": "the taped-out SARADC used gate-oxide MOSCAPs (SARADC_CELL_INVX16_ASCAP); C(V) is non-linear, only usable with a fixed bias scheme"
+    }
+  ],
+  "c_parasitic_est_ff": 15.0,
+  "switches": {
+    "transmission_gate": {
+      "ron_ohm": 200.0,
+      "source": "assumption"
+    },
+    "bootstrapped": {
+      "ron_ohm": 50.0,
+      "source": "assumption"
+    }
+  },
+  "comparator": {
+    "strongarm": {
+      "sigma_uv": 800.0,
+      "delay_ns": 0.4,
+      "source": "assumption"
+    },
+    "double_tail": {
+      "sigma_uv": 500.0,
+      "delay_ns": 0.6,
+      "source": "assumption"
+    },
+    "preamp_latch": {
+      "sigma_uv": 120.0,
+      "delay_ns": 1.2,
+      "source": "assumption"
+    }
+  },
+  "sim": {
+    "ngspice_deck": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib",
+    "xyce_deck": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.tech/xyce/models/cornerMOSlv.lib",
+    "osdi_required": true,
+    "osdi_notes": "PSP103 via OpenVAF OSDI; the working local path is PSP103 Verilog-A -> OpenVAF -> ngspice (adpll_gen characterization)"
+  },
+  "signoff": {
+    "magicrc": null,
+    "klayout_dir": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.tech/klayout",
+    "pex": "kpex"
+  },
+  "digital_ceiling_mhz": 400.0,
+  "digital_ceiling_source": "adpll_gen pdk_profiles.json ihp130 signoff_mhz (post-route TT; SS setup not closed at nominal)",
+  "maturity": "official library, 1.2V; not the sg13g2f custom bundle used by the taped-out SARADC",
+  "qualified": false,
+  "default_cap": "mim",
+  "analog": {
+    "status": "supported",
+    "style": "subckt",
+    "finger_param": "ng",
+    "sizing_um": {
+      "wn": 0.15,
+      "wp": 0.3,
+      "l": 0.13
+    },
+    "body": {
+      "nmos": "substrate",
+      "pmos": "nwell"
+    },
+    "cap_backend": "moscap",
+    "notes": "sg13_lv_nmos/pmos with ng finger param; device-level closure recorded in OpenSERDES docs/ihp_device_closure.md"
+  }
+}
