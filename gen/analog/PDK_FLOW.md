@@ -42,7 +42,7 @@ traceback.
 | sky130A_hd | our `SARADC_CAP_UNIT`, `SARADC_SW_TG` | 0 items | match | 6 / 14 caps |
 | ihp-sg13g2 | `sg13g2_inv_1` | 0 items | Netlists match | 6 caps, 2 devices |
 | gf180mcuD | `gf180mcu_fd_sc_mcu7t5v0__inv_1` | 2 leaf rules left | **match** (Magic netlist) | 15 caps, 2 devices |
-| ics55_LLSC_H7CH | `INVX1H7H` | 5 items (context) | **PASS** | 2 dev / 13 caps, 100x scale bug |
+| ics55_LLSC_H7CH | `INVX1H7H` | 5 items (context) | **PASS** | 2 dev / 13 caps, values verified |
 
 ## Commands that work
 
@@ -186,32 +186,30 @@ python3 run_lvs.py --layout INVX1H7H.gds --top INVX1H7H \
 bulk is extracted as an internal net (`$6`) and the comparison fails; without
 it the deck ties bulks to VSS/VDD globally and the netlists match.
 
-PEX via Magic's ics55 tech: the device-dimension bug is **fixed upstream**.
-The extract block used `style lambda=0.001(ics55)`, which emitted
-`w=21u l=6u` for a 0.21/0.06 um device. Replacing it with the same style
-sky130 uses, `style ngspice()` plus `lambda 1E6`, gives `w=0.21 l=0.06` and
-`w=0.27 l=0.06`. The fix is committed and pushed to the PDK repo
-(`a30372d`, origin `luyanaa/icsprout55-pdk`).
+PEX via Magic's ics55 tech is now correct. Two upstream bugs were fixed in
+the PDK repo and pushed (`a30372d`, `30fb4bd` on origin/main):
 
-The capacitance is still wrong: `C0 VSS-SUB` stays 0.87257 pF and the
-`VSS-SUB` node area implies a 0.5 um extraction lambda, i.e. C is ~1e4 too
-large. The `.ext` header stays `scale 1000 1000 50` under every knob tried
-(extract `lambda`, `variants`, cifinput `scalefactor 1/10/1000 nanometers`,
-`scalegrid 1 100/200`, runtime `lambda`). So it is the technology lambda at
-`tech load`, not the output style, and it is still open. The tech
-declares `lambda=0.001` and `scalefactor 1` (1 DBU = 1 nm), so Magic's
-ext2spice dimension convention is off by 100. `ext2spice scale off` does not
-change it, and `gds rescale false` makes it worse (w=42u/l=12u, 200x), so the
-default read path is the lesser evil. The W/L ratio is preserved (3.5 for both
-the extracted 21/6 and the real 0.21/0.06), which confirms this is a pure unit
-convention in the tech file, not a geometry error.
+1. The extract block used `style lambda=0.001(ics55)`. ext2spice wrote
+   `w=21u l=6u` for a 0.21/0.06 um device. Switching to sky130's
+   `style ngspice()` plus `lambda 1E6` gives `w=0.21 l=0.06` and
+   `w=0.27 l=0.06`.
+2. Magic's extract section takes area capacitance in **aF/lambda^2** and
+   perimeter capacitance in **aF/lambda**, not per micron (tech file manual).
+   The tech stored the LEF values unchanged, so C was 40000x too large.
+   The layout grid is 5 nm (a 0.21 um device extracts as 42 lambda), so
+   areacap is divided by 40000 and perimc by 200.
 
-The capacitance follows the same factor as area: the extracted `VSS-SUB` cap
-is 0.87 pF, and a 1.5 um^2 cell at ~0.1 fF/um^2 substrate capacitance should
-be ~0.15 fF, i.e. 1e4 smaller. So the correction is exact but must be applied
-as w/l /100 and C /1e4; the factor was cross-checked against the KLayout LVS
-netlist for the same cell (W=0.21U, L=0.06U). Until the tech's lambda/scale is
-fixed, no ics55 capacitance should be quoted, even scaled.
+Verification on `INVX1H7H` with the repo tech and no local overrides:
+
+```
+M1000 ... nm1p2_hvt_lp w=0.21 l=0.06
+M1001 ... pm1p2_hvt_lp w=0.27 l=0.06
+C0 VSS SUB  0.0526f     C3 A SUB 0.0133f     C4 Y SUB 0.03735f
+```
+
+At the LEF's 0.763 fF/um^2 those are 0.069 / 0.017 / 0.049 um^2, matching the
+drawn M1 areas (VSS rail ~0.9 x 0.08 um). Before the fix the same net was
+0.87257 pF, i.e. 1.6e4 times too large.
 
 ## Next steps, in order
 
