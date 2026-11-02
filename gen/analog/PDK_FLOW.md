@@ -41,7 +41,7 @@ traceback.
 |-----|------|-----|-----|-----|
 | sky130A_hd | our `SARADC_CAP_UNIT`, `SARADC_SW_TG` | 0 items | match | 6 / 14 caps |
 | ihp-sg13g2 | `sg13g2_inv_1` | 0 items | Netlists match | 6 caps, 2 devices |
-| gf180mcuD | `gf180mcu_fd_sc_mcu7t5v0__inv_1` | 2 leaf rules left | **don't match** | 15 caps, 2 devices |
+| gf180mcuD | `gf180mcu_fd_sc_mcu7t5v0__inv_1` | 2 leaf rules left | **match** (Magic netlist) | 15 caps, 2 devices |
 | ics55_LLSC_H7CH | `INVX1H7H` | 5 items (context) | **PASS** | 2 dev / 13 caps, 100x scale bug |
 
 ## Commands that work
@@ -122,19 +122,34 @@ The open item is LVS. Triage so far:
   instances mapped (`pfet_05v0:1` vs `_i_1`) with no pin or net error, so the
   remaining difference is in device parameters or the X-vs-M device form.
 
-The deck's own LVS testcases cannot be used as a control: the files under
-`libs.tech/klayout/tech/lvs/testing/` are Git LFS pointers (824 bytes), not
-GDS, so nothing to run. `gf180mcu.lvs` also has
-`# %include rule_decks/substrate_connections.lvs` commented out, so it does
-not tie wells by itself. A netgen self-compare of the Magic netlist against
-itself reports "Circuits match uniquely", so the PDK netgen setup is sound;
-the failure is specific to the CDL's six-pin well abstraction against a
-tap-less cell.
+Resolution: LVS matches with Magic extraction and an **X-style schematic**.
 
-So gf180 is not a layout defect: it is a choice of cell-level abstraction.
-Either compare against a 5-pin schematic that uses `SUB` for both bulks, or
-add well taps and keep the 6-pin CDL. That decision should be made once and
-used consistently for every gf180 leaf.
+```
+netgen -batch lvs "lvs_magic.spice <cell>" "sch_x.cir <cell>" \
+    libs.tech/netgen/gf180mcuD_setup.tcl
+# Circuits match uniquely.
+```
+
+where `sch_x.cir` calls the devices as subcircuits, exactly like Magic emits:
+
+```
+XMN0 ZN I VSS VPW nfet_05v0 w=0.82u l=0.6u
+XMP0 ZN I VDD VNW pfet_05v0 w=1.22u l=0.5u
+```
+
+The PDK CDL writes them as `M` devices. netgen treats the `X` form and the
+`M` form as different device classes (one keeps numeric pins, the other named
+pins), and the comparison fails even though the topology is identical. This
+is the same shape that worked for sky130 from the start.
+
+So the KLayout LVS mismatch was never about the wells: Magic's 6-pin netlist
+already carries `VNW`/`VPW`, and netgen matches it once both sides use the
+same device form. `gf180mcu.lvs`'s commented-out
+`substrate_connections.lvs` remains a note for block-level runs, not a
+blocker for a leaf.
+
+The deck's own LVS testcases cannot be used as a control: the files under
+`libs.tech/klayout/tech/lvs/testing/` are Git LFS pointers (824 bytes).
 
 ### ics55
 
