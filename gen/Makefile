@@ -5,7 +5,7 @@ PDK  ?= sky130A_hd
 OUT  ?= $(ROOT)/gen/outputs
 TRIALS ?= 20
 
-.PHONY: all check matrix feas behavioral deck measure char analog layout report clean
+.PHONY: all check matrix feas behavioral deck measure char analog layout pdk-flow report clean
 
 all: check matrix report
 
@@ -47,6 +47,12 @@ char: deck
 
 analog:
 	cd $(ROOT) && $(PY) gen/run.py analog --pdk $(PDK) --out $(OUT)/analog --smoke
+
+# Shipped-cell DRC/LVS/PEX for the non-sky130 PDKs (sky130 is covered by
+# layout).  Needs KLayout >= 0.30.9; klayout_bin.py finds one or fails clearly.
+pdk-flow:
+	mkdir -p $(OUT)/pdk_flow
+	cd $(ROOT) && $(PY) gen/analog/pdk_flow.py --pdk all --out $(OUT)/pdk_flow
 
 # Layout proof chain: KLayout DRC (feol+beol forced on), Magic extract,
 # netgen LVS, then Magic PEX and an ngspice check that the extracted

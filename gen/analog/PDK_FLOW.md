@@ -35,11 +35,24 @@ only the Ruby rule decks use 0.30.12. `gen/analog/klayout_bin.py` enforces the
 >= 0.30.9 floor and fails with the versions it saw instead of a deck
 traceback.
 
+## Reproduce
+
+```
+make -C gen layout      # sky130: our cap + TG, DRC/LVS/PEX
+make -C gen pdk-flow    # gf180 / ics55 / ihp: shipped inverter, DRC/LVS/PEX
+```
+
+`pdk_flow.py` separates **hard** violations from **context** rules. Context
+rules are the ones a single leaf cell cannot satisfy (full-die coverage,
+row-level well-tap distance, metal-dummy bookkeeping); they are listed in the
+JSON but do not fail the run. A real geometry violation still exits non-zero.
+
 ## Matrix
 
 | PDK | cell | DRC | LVS | PEX |
 |-----|------|-----|-----|-----|
 | sky130A_hd | our `SARADC_CAP_UNIT`, `SARADC_SW_TG` | 0 items | match | 6 / 14 caps |
+| (runner) | `make -C gen pdk-flow` | hard=0 for all three | pass | 2 dev each |
 | ihp-sg13g2 | `sg13g2_inv_1` | 0 items | Netlists match | 6 caps, 2 devices |
 | gf180mcuD | `gf180mcu_fd_sc_mcu7t5v0__inv_1` | 2 leaf rules left | **match** (Magic netlist) | 15 caps, 2 devices |
 | ics55_LLSC_H7CH | `INVX1H7H` | 5 items (context) | **PASS** | 2 dev / 13 caps, values verified |
