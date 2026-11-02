@@ -249,10 +249,15 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   gives 11 DRC items (CO.3, DV.6, DV.8, M1.1, NP.5a/5b, PL.4_MV, DF.14_MV),
   i.e. boundary fragments, not a device. The stdcell layer map recovered from
   the GDS is: nwell 21/0, pwell 204/0, active 22/0, implants 31/0 and 32/0,
-  contact 33/0, poly 34/0, marker 55/0, boundary 112/1. gf180 therefore needs
-  a from-primitives device drawn against those layers (and the M1 layer,
-  which does not appear in the extracted stdcell), or a device generator that
-  this PDK does not ship.
+  contact 33/0, poly 34/0, marker 55/0, boundary 112/1. gf180 therefore needs a
+  from-primitives device. `layout_gf180_dev.py` draws one: active 22/0,
+  poly 30/0, contact 33/0, metal1 34/0 (label 34/10), pwell 204/0, N implant
+  32/0, plus a p+ tap (active + 31/0) for the latch-up rule. Every vertex is
+  snapped to the 5 nm grid. The deck reports **0 items** with
+  `decks=all,-density`. Magic extracts it as `nfet_03v3 w=1.6u l=0.6u`, but
+  the gate and bulk come out as internal nets while the G/B labels sit on
+  their metal1 pads - so the poly and pwell contacts are not being recognised
+  and LVS is not passing yet.
 - **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
   installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
   `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell
