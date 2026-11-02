@@ -244,10 +244,17 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
 - **gf180mcu**: `libs.ref/gf180mcu_fd_pr/gds/` ships only BJTs, PNPs and an
   efuse; there is no MOS GDS. Devices must come from Magic's
   `gf180mcuD.tcl` generator or from the stdcell library's internal devices.
-- **ics55**: `libs.tech/klayout/pcells/ics55_mos_analog.py` is a real
-  multi-finger MOS PCell, but it imports `klayout.db`, which is not installed
-  for the system Python (the KLayout binary only exposes `pya`). Porting it to
-  `pya` is mechanical but not yet done.
+- **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
+  installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
+  `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell
+  generates, but it has a real geometry bug: the gate contact extension sits
+  at `y0 + W/2 + POLY_OV`, i.e. inside the active region, so its met1 strap
+  overlaps the source/drain met1 (an electrical short that DRC does not
+  flag). Moving it to `y0 + W + POLY_OV` exposes the next problem: POLY_OV is
+  only 0.15 um, which cannot hold a 0.09 contact plus met1 clearance to the
+  source/drain strap. A corrected local copy needs POLY_OV ~0.35 and the
+  met1 spacing rule measured; the PDK file was therefore restored, not
+  committed changed.
 
 So the leaf work starts with ihp (device cells exist), then ics55 (PCell
 port), then gf180 (generator or stdcell internals).
