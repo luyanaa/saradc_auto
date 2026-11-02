@@ -176,7 +176,12 @@ yet**: the extracted devices come out `w=21u l=6u` where the cell is
 0.21/0.06 um, i.e. 100x too large, and the caps scale with the area. The tech
 declares `lambda=0.001` and `scalefactor 1` (1 DBU = 1 nm), so Magic's
 ext2spice dimension convention is off by 100. `ext2spice scale off` does not
-change it. Fix the lambda convention before quoting any ics55 capacitance.
+change it, and `gds rescale false` makes it worse (w=42u/l=12u, 200x), so the
+default read path is the lesser evil. The W/L ratio is preserved (3.5 for both
+the extracted 21/6 and the real 0.21/0.06), which confirms this is a pure unit
+convention in the tech file, not a geometry error. Until it is fixed, ics55
+PEX capacitance can only be used after dividing by the area factor (1e4), and
+no such number should enter a report.
 
 ## Next steps, in order
 
