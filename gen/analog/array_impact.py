@@ -130,7 +130,10 @@ def analytic(nbits, cu_ff, cp_ff):
     return rows
 
 
-def report(profile, nbits=8, cu_ff=2.673, cp_ff=7.708):
+def report(profile, nbits=8, cu_ff=2.673, cp_ff=None):
+    if cp_ff is None:
+        tg = profile.get("switches", {}).get("transmission_gate", {})
+        cp_ff = tg.get("c_off_pex_ff") or tg.get("c_off_ff") or 4.63
     rows = analytic(nbits, cu_ff, cp_ff)
     worst = min(rows, key=lambda r: r["attenuation"])
     # DNL at the worst bit if every lower bit were ideal: the weight error of
@@ -179,7 +182,8 @@ def main(argv):
     ap.add_argument("--deck")
     ap.add_argument("--nbits", type=int, default=8)
     ap.add_argument("--cu-ff", type=float, default=2.673)
-    ap.add_argument("--cp-ff", type=float, default=7.708)
+    ap.add_argument("--cp-ff", type=float, default=None,
+                    help="default: the profile's TG PEX Coff")
     ap.add_argument("--simulate", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out")

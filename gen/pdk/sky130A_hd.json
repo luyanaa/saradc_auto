@@ -156,7 +156,22 @@
             "vin_v": 1.53,
             "ron_ohm": 347.8341
           }
-        ]
+        ],
+        "layout_pex": {
+          "gds": "gen/outputs/layout/switch_tg.gds",
+          "drc_items": 0,
+          "lvs": "match",
+          "c_off_ff": 7.708,
+          "c_off_schematic_ff": 4.63,
+          "breakdown_ff": {
+            "Z1": 1.565,
+            "VSS": 1.114,
+            "VDD": 0.164,
+            "SB": 0.151,
+            "S": 0.082
+          },
+          "note": "device plus this cell's routing; the Z1 term is the parallel run of the two straps and will change when the switch is tiled into the array"
+        }
       },
       "geometry_um": {
         "wn": 5.6,
@@ -193,7 +208,9 @@
           "ron_max_ohm": 594.0,
           "c_off_ff": 9.27
         }
-      ]
+      ],
+      "c_off_pex_ff": 7.708,
+      "c_off_pex_source": "layout PEX + ngspice (gen/analog/layout_check.py --device tg)"
     },
     "bootstrapped": {
       "ron_ohm": 5859.0,
