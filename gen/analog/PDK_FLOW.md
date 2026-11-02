@@ -194,9 +194,14 @@ ext2spice dimension convention is off by 100. `ext2spice scale off` does not
 change it, and `gds rescale false` makes it worse (w=42u/l=12u, 200x), so the
 default read path is the lesser evil. The W/L ratio is preserved (3.5 for both
 the extracted 21/6 and the real 0.21/0.06), which confirms this is a pure unit
-convention in the tech file, not a geometry error. Until it is fixed, ics55
-PEX capacitance can only be used after dividing by the area factor (1e4), and
-no such number should enter a report.
+convention in the tech file, not a geometry error.
+
+The capacitance follows the same factor as area: the extracted `VSS-SUB` cap
+is 0.87 pF, and a 1.5 um^2 cell at ~0.1 fF/um^2 substrate capacitance should
+be ~0.15 fF, i.e. 1e4 smaller. So the correction is exact but must be applied
+as w/l /100 and C /1e4; the factor was cross-checked against the KLayout LVS
+netlist for the same cell (W=0.21U, L=0.06U). Until the tech's lambda/scale is
+fixed, no ics55 capacitance should be quoted, even scaled.
 
 ## Next steps, in order
 
