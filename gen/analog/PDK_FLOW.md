@@ -224,13 +224,34 @@ At the LEF's 0.763 fF/um^2 those are 0.069 / 0.017 / 0.049 um^2, matching the
 drawn M1 areas (VSS rail ~0.9 x 0.08 um). Before the fix the same net was
 0.87257 pF, i.e. 1.6e4 times too large.
 
+## Own leaves per PDK: what the device cells give us
+
+The next step after the shipped-cell proof is to draw our own `cap_unit` and
+`switch_tg` on each PDK. The device inventory decides how much work that is:
+
+- **ihp-sg13g2**: `libs.ref/sg13g2_pr/gds/sg13g2_pr.gds` contains `nmos` and
+  `pmos` cells (plus HV/rf variants). They are **three-terminal fixed
+  geometry**: met1 pads only on the two diffusions, the gate is poly alone
+  (layer 5) with no met1 strap, and there is no body tap. A leaf therefore
+  needs a gate strap (poly -> mcon -> met1) and an explicit `ptap1`/`ntap1`
+  tap cell per device before LVS can see a four-terminal device.
+- **gf180mcu**: `libs.ref/gf180mcu_fd_pr/gds/` ships only BJTs, PNPs and an
+  efuse; there is no MOS GDS. Devices must come from Magic's
+  `gf180mcuD.tcl` generator or from the stdcell library's internal devices.
+- **ics55**: `libs.tech/klayout/pcells/ics55_mos_analog.py` is a real
+  multi-finger MOS PCell, but it imports `klayout.db`, which is not installed
+  for the system Python (the KLayout binary only exposes `pya`). Porting it to
+  `pya` is mechanical but not yet done.
+
+So the leaf work starts with ihp (device cells exist), then ics55 (PCell
+port), then gf180 (generator or stdcell internals).
+
 ## Next steps, in order
 
-1. Pin `KLAYOUT=0.30.12` in the flow runner and make it a hard requirement;
-   0.30.0 must fail with a clear message instead of a deck traceback.
-2. Decide the gf180 leaf abstraction (5-pin `SUB` vs 6-pin wells), then make
-   the schematic and the deck agree; only then call gf180 LVS done.
-3. Triage the ics55 M1 area item and the four empty markers, then run its LVS
-   and Magic PEX.
-4. Only after those three pass: draw our own `cap_unit`/`switch_tg` leaves per
-   PDK. A shipped-cell pass proves the deck, not our generator.
+1. ihp leaf: strap the `nmos`/`pmos` gates to met1, add tap cells, then build
+   `cap_unit` (gates on VSH, S/D/B on FL/VNW/VPW) and prove it.
+2. ics55: port `ics55_mos_analog.py` from `klayout.db` to `pya`, then build
+   the same leaf and re-run DRC/LVS/PEX.
+3. gf180: drive Magic's `gf180mcuD.tcl` device generator or lift the internal
+   devices out of a stdcell, then build the leaf.
+4. Array-level per-bit PEX on top of the leaves.
