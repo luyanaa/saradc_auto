@@ -252,9 +252,14 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   overlaps the source/drain met1 (an electrical short that DRC does not
   flag). Moving it to `y0 + W + POLY_OV` exposes the next problem: POLY_OV is
   only 0.15 um, which cannot hold a 0.09 contact plus met1 clearance to the
-  source/drain strap. A corrected local copy needs POLY_OV ~0.35 and the
-  met1 spacing rule measured; the PDK file was therefore restored, not
-  committed changed.
+  source/drain strap. `gen/analog/ics55_mos.py` is a corrected local copy
+  (the PDK file stays untouched): POLY_OV 0.35, the gate pad inside the
+  overhang above the active, the contact fully inside that pad, and met1
+  split into per-finger source/drain straps instead of one slab over the
+  whole active (the original slab shorts source to drain). With those four
+  fixes the nmos+pmos leaf is **DRC 0** (`metal.m1.spacing` fixes the gap at
+  0.09 um, which is the ics55 minimum). LVS still needs top-cell pin labels
+  and the device-model marker; that is the next step.
 
 So the leaf work starts with ihp (device cells exist), then ics55 (PCell
 port), then gf180 (generator or stdcell internals).

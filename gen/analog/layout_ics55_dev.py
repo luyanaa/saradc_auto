@@ -30,9 +30,10 @@ kl.db = pya
 sys.modules.setdefault("klayout", kl)
 sys.modules["klayout.db"] = pya
 
-PC = os.path.join(ICS55_ROOT, "libs.tech/klayout/pcells")
-sys.path.insert(0, PC)
-import ics55_mos_analog  # noqa: F401,E402  (registers the ICsprout55 library)
+# local corrected copy (POLY_OV 0.35, gate strap above the active)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import ics55_mos  # noqa: F401,E402  (registers ICsprout55_local)
 
 
 def build() -> None:
@@ -41,11 +42,11 @@ def build() -> None:
     top = ly.create_cell("ics55_leaf")
 
     def add(dev_type: str, x: float, y: float, name: str):
-        c = ly.create_cell("ics55_mos_analog", "ICsprout55",
+        c = ly.create_cell("ics55_mos_analog", "ICsprout55_local",
                            {"dev_type": dev_type, "w": 1.0, "l": 0.06,
                             "fingers": 1, "guard_ring": 1, "ring_metal": 1})
         if c is None:
-            raise SystemExit("PCell ics55_mos_analog not found in ICsprout55")
+            raise SystemExit("PCell ics55_mos_analog not found in ICsprout55_local")
         c.name = name
         top.insert(pya.CellInstArray(c.cell_index(),
                                      pya.Trans(pya.Vector(int(x * 1000), int(y * 1000)))))
