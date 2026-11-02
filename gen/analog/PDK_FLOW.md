@@ -186,9 +186,19 @@ python3 run_lvs.py --layout INVX1H7H.gds --top INVX1H7H \
 bulk is extracted as an internal net (`$6`) and the comparison fails; without
 it the deck ties bulks to VSS/VDD globally and the netlists match.
 
-PEX via Magic's ics55 tech runs (2 devices + 13 caps) but is **not usable
-yet**: the extracted devices come out `w=21u l=6u` where the cell is
-0.21/0.06 um, i.e. 100x too large, and the caps scale with the area. The tech
+PEX via Magic's ics55 tech: the device-dimension bug is **fixed upstream**.
+The extract block used `style lambda=0.001(ics55)`, which emitted
+`w=21u l=6u` for a 0.21/0.06 um device. Replacing it with the same style
+sky130 uses, `style ngspice()` plus `lambda 1E6`, gives `w=0.21 l=0.06` and
+`w=0.27 l=0.06`. The fix is committed and pushed to the PDK repo
+(`a30372d`, origin `luyanaa/icsprout55-pdk`).
+
+The capacitance is still wrong: `C0 VSS-SUB` stays 0.87257 pF and the
+`VSS-SUB` node area implies a 0.5 um extraction lambda, i.e. C is ~1e4 too
+large. The `.ext` header stays `scale 1000 1000 50` under every knob tried
+(extract `lambda`, `variants`, cifinput `scalefactor 1/10/1000 nanometers`,
+`scalegrid 1 100/200`, runtime `lambda`). So it is the technology lambda at
+`tech load`, not the output style, and it is still open. The tech
 declares `lambda=0.001` and `scalefactor 1` (1 DBU = 1 nm), so Magic's
 ext2spice dimension convention is off by 100. `ext2spice scale off` does not
 change it, and `gds rescale false` makes it worse (w=42u/l=12u, 200x), so the
