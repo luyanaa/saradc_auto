@@ -266,8 +266,12 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   `M0 D G S VSS NM1P2_SVT_LP w=1u l=0.06u`:
   `ICS55_LVS_COMPARE=PASS`, "CONGRATULATIONS! Netlists match."
   Magic PEX on the same leaf: 1 device, 7 caps (D/S to SUB 76 aF each).
-  The cap_unit composition (gates on VSH, S/D on FL, rings as VPW/VNW) is
-  still to do.
+  `layout_ics55_cap.py` composes the cap_unit: two devices without guard
+  rings (the deck ties bulks to the global VDD/VSS anyway), gates tied by a
+  metal1 bar at y 0.72..0.88 and S/D by a metal1 bar at y -0.45..-0.30.
+  DRC 0, `ICS55_LVS_COMPARE=PASS`, PEX 2 devices / 8 caps, VSH-SUB 427 aF.
+  The first attempt put the VSH bar at y 1.25 and missed the gate pads; the
+  gate landing pad is at y 0.71..0.85, not 1.2.
 
 So the leaf work starts with ihp (device cells exist), then ics55 (PCell
 port), then gf180 (generator or stdcell internals).
