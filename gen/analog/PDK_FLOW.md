@@ -232,9 +232,12 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
 - **ihp-sg13g2**: `libs.ref/sg13g2_pr/gds/sg13g2_pr.gds` contains `nmos` and
   `pmos` cells (plus HV/rf variants). They are **three-terminal fixed
   geometry**: met1 pads only on the two diffusions, the gate is poly alone
-  (layer 5) with no met1 strap, and there is no body tap. A leaf therefore
-  needs a gate strap (poly -> mcon -> met1) and an explicit `ptap1`/`ntap1`
-  tap cell per device before LVS can see a four-terminal device.
+  (layer 5) with no met1 strap, and there is no body tap. **Done for one
+  device**: `gen/analog/layout_ihp_dev.py` adds a poly neck + landing pad,
+  a 0.16 contact and a met1 pad, plus a `ptap1` tap 1.2 um away. The result
+  clears the IHP DRC deck with **0 items** (bare `nmos` has 1, LU.b; the
+  first strap attempt had 19, all spacing/enclosure, fixed by moving the pad
+  clear of the active and the diffusion met1).
 - **gf180mcu**: `libs.ref/gf180mcu_fd_pr/gds/` ships only BJTs, PNPs and an
   efuse; there is no MOS GDS. Devices must come from Magic's
   `gf180mcuD.tcl` generator or from the stdcell library's internal devices.
