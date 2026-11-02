@@ -21,6 +21,7 @@ import os
 import pya
 
 OUT = os.environ.get("OUT", "/tmp/adcgen/flow/gf180/leaf_nmos.gds")
+KIND = os.environ.get("KIND", "nmos")
 
 ACT, POLY, CT, M1, NW, PW, IMP31, IMP32 = (
     (22, 0), (30, 0), (33, 0), (34, 0), (21, 0), (204, 0), (31, 0), (32, 0))
@@ -36,7 +37,7 @@ GX1 = GX0 + L
 def build() -> None:
     ly = pya.Layout()
     ly.dbu = 0.001
-    top = ly.create_cell("gf_nmos")
+    top = ly.create_cell(f"gf_{KIND}")
 
     def box(layer, x1, y1, x2, y2):
         # gf180 wants every vertex on the 5 nm manufacturing grid
@@ -44,10 +45,15 @@ def build() -> None:
         top.shapes(ly.layer(*layer)).insert(
             pya.Box(*(snap(v) for v in (x1, y1, x2, y2))))
 
+    is_p = KIND == "pmos"
     box(ACT, X0, Y0, X0 + GX1 + 0.5, Y0 + ACT_H)
     box(POLY, X0 + GX0, Y0 - 0.5, X0 + GX1, Y0 + ACT_H + 0.5)
-    box(PW, X0 - 0.4, Y0 - 0.9, X0 + GX1 + 3.4, Y0 + ACT_H + 0.9)
-    box(IMP32, X0 - 0.2, Y0 - 0.73, X0 + GX1 + 0.7, Y0 + ACT_H + 0.53)
+    if is_p:
+        box(NW, X0 - 0.8, Y0 - 0.9, X0 + GX1 + 3.6, Y0 + ACT_H + 0.9)
+        box(IMP31, X0 - 0.2, Y0 - 0.73, X0 + GX1 + 0.7, Y0 + ACT_H + 0.53)
+    else:
+        box(PW, X0 - 0.4, Y0 - 0.9, X0 + GX1 + 3.4, Y0 + ACT_H + 0.9)
+        box(IMP32, X0 - 0.2, Y0 - 0.73, X0 + GX1 + 0.7, Y0 + ACT_H + 0.53)
 
     # source / drain / gate contacts (0.22) and met1 pads
     for cx in (X0 + 0.22, X0 + GX1 + 0.28):
@@ -58,13 +64,15 @@ def build() -> None:
     box(CT, gx - 0.11, gy - 0.11, gx + 0.11, gy + 0.11)
     box(M1, gx - 0.25, gy - 0.25, gx + 0.25, gy + 0.25)
 
-    # substrate tap: p+ active with a contact to metal1
+    # body tap for the latch-up rule: p+ in pwell, n+ in nwell. The body
+    # node itself is named by the well text label, not through this contact.
     box(ACT, 2.2, 0.4, 3.2, 1.2)
-    box(IMP31, 2.0, 0.2, 3.4, 1.4)
+    box(IMP31 if not is_p else IMP32, 2.0, 0.2, 3.4, 1.4)
     box(CT, 2.59, 0.69, 2.81, 0.91)
     box(M1, 2.45, 0.55, 2.95, 1.05)
     # name the substrate node directly on the pwell text layer
-    top.shapes(ly.layer(204, 10)).insert(pya.Text("B", pya.Trans(
+    body_layer = (21, 10) if is_p else (204, 10)
+    top.shapes(ly.layer(*body_layer)).insert(pya.Text("B", pya.Trans(
         pya.Vector(1000, 500))))
 
     for text, x, y in (("S", X0 + 0.05, Y0 + ACT_H / 2),

@@ -261,7 +261,13 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   label on the pwell text layer **204/10** names the substrate directly: the
   extraction becomes `X0 D G S B nfet_03v3 w=1.6u l=0.6u`, netgen reports
   "Circuits match uniquely", and Magic PEX gives 1 device / 6 caps. gf180 DRC
-  stays at 0 items.
+  stays at 0 items. The PMOS uses the same recipe with nwell 21/0 and a
+  `B` label on 21/10; it also needs an n+ tap (active + NPLUS 32/0) inside
+  the well for DF.13_LV. `layout_gf180_cap.py` composes the cap_unit: gates
+  on metal2 (36/0) with via1 (35/0, exactly 0.26 um) because a long metal1
+  bar parallel to the source/drain pads breaks the 0.23 um spacing rule; FL
+  is a metal1 bar across each device's pads joined outside the pad column.
+  DRC 0, netgen match, PEX 2 devices / 6 caps, FL-VSH 258 aF.
 - **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
   installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
   `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell
