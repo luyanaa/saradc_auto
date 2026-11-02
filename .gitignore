@@ -1,2 +1,5 @@
 # agent scratch state (deepwork progress/router heads)
 .slim/deepwork/
+
+# netgen comparison output from ad-hoc LVS runs
+comp.out
