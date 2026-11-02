@@ -63,8 +63,9 @@ def build() -> None:
     box(IMP31, 2.0, 0.2, 3.4, 1.4)
     box(CT, 2.59, 0.69, 2.81, 0.91)
     box(M1, 2.45, 0.55, 2.95, 1.05)
-    top.shapes(ly.layer(*LBL)).insert(pya.Text("B", pya.Trans(
-        pya.Vector(2950, 1100))))
+    # name the substrate node directly on the pwell text layer
+    top.shapes(ly.layer(204, 10)).insert(pya.Text("B", pya.Trans(
+        pya.Vector(1000, 500))))
 
     for text, x, y in (("S", X0 + 0.05, Y0 + ACT_H / 2),
                        ("D", X0 + GX1 + 0.45, Y0 + ACT_H / 2),

@@ -257,8 +257,11 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   `decks=all,-density`. Magic extracts it as `nfet_03v3 w=1.6u l=0.6u`.
   The gate contact was not recognised as `pc` with a 0.34 um metal1 pad;
   growing every metal1 pad to 0.5 um makes the gate connect
-  (`X0 D G S a_440_80#`). The p+ tap is still separate (`B` stays an m1-only
-  node), so the bulk is not exposed and LVS is not passing yet.
+  (`X0 D G S a_440_80#`). The p+ tap stayed an m1-only node, but putting a `B`
+  label on the pwell text layer **204/10** names the substrate directly: the
+  extraction becomes `X0 D G S B nfet_03v3 w=1.6u l=0.6u`, netgen reports
+  "Circuits match uniquely", and Magic PEX gives 1 device / 6 caps. gf180 DRC
+  stays at 0 items.
 - **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
   installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
   `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell
