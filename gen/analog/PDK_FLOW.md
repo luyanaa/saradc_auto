@@ -258,8 +258,16 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   split into per-finger source/drain straps instead of one slab over the
   whole active (the original slab shorts source to drain). With those four
   fixes the nmos+pmos leaf is **DRC 0** (`metal.m1.spacing` fixes the gap at
-  0.09 um, which is the ics55 minimum). LVS still needs top-cell pin labels
-  and the device-model marker; that is the next step.
+  0.09 um, which is the ics55 minimum).
+  `layout_ics55_leaf.py` flattens one device into the top cell and puts
+  S/D/G/B text on the M1 net-label layer **81/6** (the deck only takes ports
+  from direct top-cell text). The deck extracts `NM1P2_SVT_LP L=0.06U W=1U`
+  with the bulk on the global VSS, so the schematic is
+  `M0 D G S VSS NM1P2_SVT_LP w=1u l=0.06u`:
+  `ICS55_LVS_COMPARE=PASS`, "CONGRATULATIONS! Netlists match."
+  Magic PEX on the same leaf: 1 device, 7 caps (D/S to SUB 76 aF each).
+  The cap_unit composition (gates on VSH, S/D on FL, rings as VPW/VNW) is
+  still to do.
 
 So the leaf work starts with ihp (device cells exist), then ics55 (PCell
 port), then gf180 (generator or stdcell internals).
