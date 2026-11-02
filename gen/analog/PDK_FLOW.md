@@ -122,6 +122,10 @@ The open item is LVS. Triage so far:
   instances mapped (`pfet_05v0:1` vs `_i_1`) with no pin or net error, so the
   remaining difference is in device parameters or the X-vs-M device form.
 
+The deck's own LVS testcases cannot be used as a control: the files under
+`libs.tech/klayout/tech/lvs/testing/` are Git LFS pointers (824 bytes), not
+GDS, so nothing to run.
+
 So gf180 is not a layout defect: it is a choice of cell-level abstraction.
 Either compare against a 5-pin schematic that uses `SUB` for both bulks, or
 add well taps and keep the 6-pin CDL. That decision should be made once and
