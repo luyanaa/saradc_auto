@@ -242,8 +242,17 @@ The next step after the shipped-cell proof is to draw our own `cap_unit` and
   make D/G/S/B ports, and both leaves pass netgen LVS (`Circuits match
   uniquely`) and Magic PEX (1 device, 6 caps for the NMOS).
 - **gf180mcu**: `libs.ref/gf180mcu_fd_pr/gds/` ships only BJTs, PNPs and an
-  efuse; there is no MOS GDS. Devices must come from Magic's
-  `gf180mcuD.tcl` generator or from the stdcell library's internal devices.
+  efuse; `gf180mcuD.tcl` has no MOS generator. The only transistors are
+  inside the stdcell layouts, and **cropping one out does not work**: the
+  inverter shares a single active strip across both devices, so cutting at
+  the nwell boundary slices active/poly/met1. A first crop of the NMOS half
+  gives 11 DRC items (CO.3, DV.6, DV.8, M1.1, NP.5a/5b, PL.4_MV, DF.14_MV),
+  i.e. boundary fragments, not a device. The stdcell layer map recovered from
+  the GDS is: nwell 21/0, pwell 204/0, active 22/0, implants 31/0 and 32/0,
+  contact 33/0, poly 34/0, marker 55/0, boundary 112/1. gf180 therefore needs
+  a from-primitives device drawn against those layers (and the M1 layer,
+  which does not appear in the extracted stdcell), or a device generator that
+  this PDK does not ship.
 - **ics55**: `ics55_mos_analog.py` imports `klayout.db` (pip module, not
   installed); `gen/analog/layout_ics55_dev.py` runs it under the binary's
   `pya` with a `klayout.db = pya` module shim, no PDK source change. The PCell
