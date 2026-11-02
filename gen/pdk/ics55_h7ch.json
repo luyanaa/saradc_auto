@@ -28,8 +28,8 @@
     "tech_lef": "/grid/icsprout55-pdk/prtech/techLEF/N551P6M_ecos.lef"
   },
   "devices": {
-    "nmos": "nm1p2_hvt_lp_core",
-    "pmos": "pm1p2_hvt_lp_core"
+    "nmos": "nm1p2_hvt_lp",
+    "pmos": "pm1p2_hvt_lp"
   },
   "cap_options": [
     {
@@ -98,13 +98,13 @@
   "analog": {
     "status": "scaffold",
     "style": "subckt",
-    "finger_param": "fingers",
+    "finger_param": "nf",
     "sizing_um": {
       "wn": 0.1,
       "wp": 0.2,
       "l": 0.06
     },
     "cap_backend": "mom",
-    "notes": "vendor model cards are evaluation-only; device subckt binding unverified"
+    "notes": "device names verified against model_wrapper1_hsp.lib (nm1p2_hvt_lp / pm1p2_hvt_lp wrappers, nf finger param), but the deck is HSpice-only ('for hspice only' in readme.txt) and evaluation-licensed, and the wrappers .INC HSpice .mdl files. ngspice cannot run it, so generation stays fail-closed."
   }
 }

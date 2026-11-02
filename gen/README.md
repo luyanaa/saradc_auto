@@ -312,20 +312,23 @@ not silent assumptions.
 
 ### Still assumed
 
-- `ac_pct_um` (Pelgrom) for every PDK. The sky130 oxide-mismatch expression is
-  written for l/w in microns; fed SI metres it makes `slope/sqrt(l*w)` about
-  9.5e3, toxm goes negative and the capacitance collapses. Seeding `.spiceinit`
-  does not help because the parameter is evaluated at model expansion. A_C must
-  come from per-run model cards or measured silicon.
-- Comparator input-referred **noise** (not offset). That is a transient-noise
-  quantity; only small-signal AC noise is available here. `sigma_uv` stays 1000.
+- `ac_pct_um` is **measured for sky130** (0.234 %*um, see below) but still an
+  assumption for gf180 and ihp. The mismatch model needs `MC_MM_SWITCH=1`
+  declared after the deck include and l/w in micrometres; the deck defines the
+  switch as 0 and overrides an earlier declaration.
+- Comparator input-referred **noise** is now measured for sky130 (500 uV,
+  band tied to the measured delay). It is the small-signal regeneration noise
+  at the decision point, not a transient-noise distribution.
+- gf180 3.3 V reuses the 5 V process deck's 3.3 V devices because the AS tree
+  ships no ngspice deck. ics55 has no runnable deck at all.
 - Nothing about switch Ron any more: both the TG and the bootstrap were
-  measured. The bootstrap is recorded as `measured_not_selected`.
+  measured, and the selected TG now also has a layout PEX for Coff. The
+  bootstrap is recorded as `measured_not_selected`.
 
-So the sky130 row now reads `unverified: cap, comparator` — the switch dropped
-off the list — but the status stays `PASS_FEASIBLE_ASSUMPTION` because the
-Pelgrom coefficient and the comparator noise are still estimates. That is the
-intended behaviour: partial measurement is not a pass.
+So the sky130 row reads `PASS_FEASIBLE` with no `unverified` entry: cap
+density, A_C, switch Ron/Coff and comparator offset/delay/noise are all
+measured for that PDK. `qualified` is still `false` — a feasibility gate is
+not a signoff.
 
 ### Parasitic impact on the array: open, and honestly so
 
@@ -383,8 +386,8 @@ total, so roughly 0.68 fF of the 0.958 is the met2 detour this cell needs to
 reach its top-plate pin. In an array that detour is replaced by the top-plate
 bus, so **0.958 fF is this cell's number and must not be multiplied by 256**.
 It is on the **top plate**, so whatever the array's bus costs is a common
-gain error on `VSH`, not a per-bit weight error. It is not the switch
-off-capacitance question, which is still open because the TG has no layout.
+gain error on `VSH`, not a per-bit weight error. The switch off-capacitance
+is a separate cell and is measured in the next section.
 
 What the layout forced, and what each trap cost:
 
@@ -410,7 +413,94 @@ What the layout forced, and what each trap cost:
   `layout_check.simulate()` adds the `u` suffix to a copy used only for the
   bench; the extracted netlist is left untouched.
 
-Still missing, in order: the selected 4x TG layout (that is what turns the
-4.63 fF off-cap assumption into a measurement), then the array, then per-bit
-PEX. The cap cell being clean does not qualify the generator: `qualified`
-stays `false` and no row moves off `PASS_FEASIBLE_ASSUMPTION`.
+### The 4x transmission gate: DRC clean, LVS matched, Coff measured
+
+`make -C gen layout` now proves both cells. The TG leg:
+
+```
+[tg] gds  switch_tg.gds  SARADC_SW_TG   4.715 x 12.700 um
+[tg] drc  PASS (0 items)
+[tg] lvs  PASS (2 devices)              "Circuits match uniquely"
+[tg] pex  Z2 parasitic 3.075 fF over 14 caps
+[tg] sim  Coff 7.708 fF  (schematic 4.63 fF, delta +3.078)
+```
+
+The delta is exactly the extracted net's capacitance to everything else
+(Z1 1.565 fF, VSS 1.114, VDD 0.164, SB 0.151, S 0.082), so the two numbers
+are consistent rather than contradictory: 4.63 fF is the device, 7.708 fF is
+the device plus the routing this cell needs. Of that routing, 1.565 fF is the
+parallel run of the Z1 and Z2 straps, which is a property of this test cell
+and will change when the switch is tiled into the array.
+
+`array_impact.py` now defaults to the PEX value. Under the same
+unconfirmed-bound assumption the worst-bit attenuation drops from 36.6% to
+25.7% (implied DNL 2.82 LSB). That number is still an upper bound and still
+must not size the array; it is there so nobody quotes the schematic 4.63 fF
+as if it were the node capacitance.
+
+Layout traps specific to the TG:
+
+- A transmission gate is symmetric, so which diffusion is "source" does not
+  matter. The pairing that works without a mirror keeps Z2 on the nfet middle
+  column and the pfet *left* column: the nfet-middle rail then spans
+  `[0.485, X+0.265]`, and the other net's drops at `0.035..0.265` and
+  `X+0.485..X+0.715` both fall outside it. The first attempt put Z2 on the
+  pfet middle column and shorted both terminals.
+- The pfet gate label was placed in the *unshifted* device coordinate frame,
+  so it landed in empty space and LVS saw a three-pin pfet with a floating
+  gate. Device subcells are placed at an offset; every label derived from them
+  must be shifted too.
+- With two symmetric devices, netgen cannot disambiguate six top-level pins.
+  The schematic subckt port order must match the extracted order exactly
+  (`Z1 Z2 S SB VSS VDD`), otherwise the run ends in "Top level cell failed pin
+  matching" even though devices and nets match.
+
+### Measured mismatch and comparator noise
+
+Two numbers that were estimates are now measured:
+
+- **Pelgrom `A_C` = 0.234 %*um** (was 1.0). The sky130 models write the
+  mismatch term as
+  `vth0 = nom + MC_MM_SWITCH*AGAUSS(0,1,1)*(slope/sqrt(l*w*mult))`.
+  Two things were wrong: the deck defines `MC_MM_SWITCH=0`, so a declaration
+  before the include is overridden and the term never varies; and `l`,`w` must
+  be raw micrometres (with `.option scale=1e-6` for the device) because the
+  expression squares them directly. With `MC_MM_SWITCH=1` declared *after*
+  the include and each run re-sourcing the card with a new `rndseed`:
+  40 runs at 0.63 um^2 give sigma 0.293%, 40 runs at 2.52 um^2 give 0.148%.
+  The ratio is 1.98 (the 1/sqrt(A) law predicts 2.0) and the two single-area
+  A_C values agree to 1% (0.2327 vs 0.2351).
+- **Comparator input-referred noise = 500 uV** (was 1000). ngspice `.noise`
+  works on the comparator held in its decision state (CLK=VDD, inputs at
+  Vcm): 86 nV/rtHz at 1 MHz, 12.5 nV/rtHz at 1 GHz, integrated over
+  100 MHz..1.57 GHz. The upper edge is not free: it is
+  `1/(2*pi*delay)` from the measured 0.101 ns regeneration delay. The 1/f
+  term below 100 MHz is outside the band, so this is regeneration noise, not
+  the full sampled noise.
+
+Fixing the noise measurement also exposed a reporting bug: `rows()` returns
+`[index, time, voutp, voutn]`, and the delay code used `row[0]` as seconds.
+It reported 1114 ns instead of 0.101 ns. That is now `row[1]`.
+
+### PDK bindings: gf180 open, ics55 still closed
+
+- gf180mcu **3.3 V and 5 V** are now `analog.status: supported`. The device
+  bindings were read from the installed gf180mcuD ngspice deck:
+  `.subckt nfet_03v3/pfet_03v3` and `nfet_05v0/pfet_05v0`, `nf` finger
+  parameter, SI `w`/`l`. The deck needs `design.spice` included first and
+  `.lib sm141064.spice <corner>` run from the deck directory. The 3.3 V AS
+  tree ships no ngspice deck, so that profile reuses the 5 V process deck's
+  3.3 V devices; that reuse is recorded as an assumption.
+- The smoke test had been hardcoding sky130 device names, so gf180 netlists
+  were never rewritten and every leaf failed. It now takes the names from the
+  profile. Both gf180 profiles pass all three connectivity checks.
+- **ics55 stays fail-closed.** The wrapper names are real
+  (`nm1p2_hvt_lp`/`pm1p2_hvt_lp`, `nf`), but the deck says "for hspice only",
+  is evaluation-licensed, and the wrappers `.INC` HSpice `.mdl` files. ngspice
+  cannot run it, so claiming `supported` would be false.
+
+Still missing: the CDAC array, per-bit PEX, and a real post-layout comparison.
+`qualified` stays `false`. The sky130 8-bit row does move from
+`PASS_FEASIBLE_ASSUMPTION` to `PASS_FEASIBLE` because cap density, A_C,
+switch Ron and comparator offset/delay/noise are all measured for this PDK;
+that is an input-provenance change, not a signoff.

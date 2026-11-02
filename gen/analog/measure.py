@@ -106,24 +106,53 @@ def fit_pelgrom(points):
     mx, my = sum(xs) / n, sum(ys) / n
     den = sum((x - mx) ** 2 for x in xs)
     if den == 0:
-        return None
+        # one area still determines A_C: sigma_rel = A_C/sqrt(area)
+        return ys[0] / xs[0] * 100.0 if xs[0] else None
     slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den
     return slope * 100.0                                # %*um
 
 
+def mc_card(deck_path, params, vcm, vdiff, leaf):
+    """One Monte Carlo card in the units the PDK mismatch term expects.
+
+    The sky130 models write the Pelgrom term as
+    ``vth0 = nom + MC_MM_SWITCH*AGAUSS(0,1,1)*(slope/sqrt(l*w*mult))``.
+    Two things are needed for that to mean anything:
+      * MC_MM_SWITCH=1 declared AFTER the deck include, because the deck
+        defines it as 0 and would override an earlier declaration;
+      * l and w as raw micrometre numbers, with ``.option scale=1e-6`` for the
+        device itself, because the expression squares them directly.
+    AGAUSS is evaluated when the card is parsed, so each run sources the card
+    again with a new rndseed.
+    """
+    micro = re.sub(r"([wl])=([\d.]+)u", r"\1=\2", leaf)
+    return f"""* adc generator mismatch card
+.option scale=1e-6
+.include {deck_path}
+.param MC_MM_SWITCH=1
+{micro}
+Vg vsh 0 dc {vcm + vdiff:.6f} ac 1
+Vb fl 0 dc {vcm - vdiff:.6f}
+Vnw vnw 0 dc {vcm * 2:.6f}
+Vpw vpw 0 dc 0
+Xc vsh fl vnw vpw SARADC_CAP_UNIT
+.ac lin 1 {FREQ:g} {FREQ:g}
+.print ac i(vg)
+"""
+
+
 def mismatch(deck_path, params, vcm, runs, seed0=1, leaf=""):
-    """Monte Carlo over the PDK oxide mismatch."""
+    """Monte Carlo over the PDK mismatch model."""
     values = []
     with tempfile.TemporaryDirectory(prefix="adcgen_mc_") as tmp:
+        card = mc_card(deck_path, params, vcm, 0.6, leaf)
+        card_path = os.path.join(tmp, "card.sp")
+        with open(card_path, "w", encoding="utf-8") as fh:
+            fh.write(card)
         for r in range(runs):
-            net = cap_netlist(deck_path, params, vcm, 0.6, leaf)
-            net = net.replace(".ac lin", f""".control
-set rndseed={seed0 + r}
-run
-.endc
-.ac lin""")
-            net = net.replace(".include ", ".param mc_mm_switch=1\n.include ", 1)
-            rc, log = ngspice(net, tmp)
+            drv = (f"* mc driver\n.control\nset rndseed={seed0 + r}\n"
+                   f"source {card_path}\nrun\n.endc\n")
+            rc, log = ngspice(drv, tmp)
             if rc != 0:
                 return {"runs": 0, "error": log[-400:]}
             got = parse_ac(log)
@@ -133,8 +162,13 @@ run
     n = len(values)
     mean = sum(values) / n
     var = sum((v - mean) ** 2 for v in values) / (n - 1) if n > 1 else 0.0
-    return {"runs": n, "mean_ff": mean, "sigma_ff": math.sqrt(var),
-            "sigma_rel": math.sqrt(var) / mean if mean else None,
+    sigma = math.sqrt(var)
+    if n > 1 and sigma == 0.0:
+        return {"runs": n, "mean_ff": mean, "sigma_ff": 0.0,
+                "error": "zero spread: the deck's mismatch term did not vary. "
+                         "Do not report an A_C from this."}
+    return {"runs": n, "mean_ff": mean, "sigma_ff": sigma,
+            "sigma_rel": sigma / mean if mean else None,
             "min_ff": min(values), "max_ff": max(values)}
 
 
@@ -198,7 +232,7 @@ def human(r):
             lines.append(f"  MC {mc['runs']} runs: mean {mc['mean_ff']:.3f} fF, "
                          f"sigma {mc['sigma_ff']:.4f} fF "
                          f"({mc['sigma_rel']*100:.3f} %), "
-                         f"A_C ~ {r.get('ac_pct_um_estimate', float('nan')):.4f} %*um")
+                         f"A_C ~ {(r.get('ac_pct_um_estimate') or float('nan')):.4f} %*um")
         else:
             lines.append(f"  MC failed: {mc.get('error', 'unknown')}")
     return "\n".join(lines)

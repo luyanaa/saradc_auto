@@ -26,8 +26,8 @@
     "tech_lef": "/grid/gf180mcu/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3/techlef/gf180mcu_as_sc_mcu7t3v3__nom.tlef"
   },
   "devices": {
-    "nmos": "gf180mcu_fd_pr__nfet_03v3",
-    "pmos": "gf180mcu_fd_pr__pfet_03v3"
+    "nmos": "nfet_03v3",
+    "pmos": "pfet_03v3"
   },
   "cap_options": [
     {
@@ -94,7 +94,7 @@
   "qualified": false,
   "default_cap": "mim",
   "analog": {
-    "status": "scaffold",
+    "status": "supported",
     "style": "subckt",
     "finger_param": "nf",
     "sizing_um": {
@@ -103,6 +103,11 @@
       "l": 0.28
     },
     "cap_backend": "mim",
-    "notes": "3.3V device subckt names are not verified in this checkout; generation fails closed"
+    "notes": "the 3.3V AS tree has no ngspice deck; the binding was read from the installed gf180mcuD deck (sm141064.spice, '0.18um 3.3V/6V'): .subckt nfet_03v3/pfet_03v3, nf finger param. Reusing the 5V process deck for 3.3V devices is an assumption worth re-checking against the AS PDK's own models.",
+    "model_deck": {
+      "params": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/design.spice",
+      "lib": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/sm141064.spice typical",
+      "cwd": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice"
+    }
   }
 }

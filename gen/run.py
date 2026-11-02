@@ -202,7 +202,8 @@ def cmd_analog(argv):
     if args.smoke:
         import smoke
         manifests = {t: os.path.join(args.out, t) for t, _, _, _ in rows}
-        results = smoke.run(manifests, profile["vdd"])
+        results = smoke.run(manifests, profile["vdd"],
+                            devices=profile["devices"])
         print()
         for r in results:
             print(f"{'PASS' if r['pass'] else 'FAIL'}  {r['topology']:16s} {r['check']}")

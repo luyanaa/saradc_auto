@@ -281,6 +281,75 @@ Xc inp inn clk outp outn vdd vss SARADC_CMP_STRONGARM
         return last[-2] - last[-1], log
 
 
+def comparator_noise(profile, deck_path, params=None, vdd=None, delay_ns=None,
+                     fstart=1e5, fstop=1e10, points=10):
+    """Input-referred noise at the decision operating point.
+
+    A clocked comparator has no single "noise" number: the input-referred
+    density is meaningful only at a stated bandwidth.  ngspice can linearise
+    the circuit at the decision point (CLK high, inputs at Vcm) and run a
+    small-signal noise analysis there, which is the standard way to get the
+    regeneration noise.  The integration band is tied to the measured
+    regeneration delay: f_bw = 1/(2*pi*delay).
+    """
+    deck_path = os.path.abspath(os.path.expanduser(deck_path))
+    dev = macro_gen.device_binding(profile)
+    size = profile.get("analog", {}).get("sizing_um") or {}
+    params = {"wn": size.get("wn", 1.0), "wp": size.get("wp", 2.0),
+              "l": size.get("l", 0.15)}
+    vdd = vdd if vdd is not None else profile["vdd"]
+    circuit = leaf(dev, "cmp_strongarm", params)
+    net = f"""* comparator input-referred noise
+{circuit}
+.include {deck_path}
+Vdd vdd 0 dc {vdd:g}
+Vss vss 0 dc 0
+Vip inp 0 dc {vdd/2:g} ac 1
+Vin inn 0 dc {vdd/2:g}
+Vclk clk 0 dc {vdd:g}
+Xc inp inn clk outp outn vdd vss SARADC_CMP_STRONGARM
+.noise v(outp) Vip dec {points} {fstart:g} {fstop:g}
+.print noise onoise_spectrum inoise_spectrum
+.end
+"""
+    with tempfile.TemporaryDirectory(prefix="adcgen_cmpn_") as tmp:
+        rc, log = run(net, tmp)
+        if rc != 0:
+            return {"error": clean(log)}
+    table = []
+    for line in log.splitlines():
+        m = re.match(r"^\d+\s+([\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*$",
+                     line.strip())
+        if m:
+            table.append((float(m.group(1)), float(m.group(2)), float(m.group(3))))
+    if len(table) < 3:
+        return {"error": "noise analysis produced no spectrum: " + clean(log)}
+
+    f_bw = (1.0 / (2.0 * 3.141592653589793 * delay_ns * 1e-9)
+            if delay_ns else 1.6e9)
+    lo, hi = 1e8, min(f_bw, fstop)
+    total = 0.0
+    for (f1, _, i1), (f2, _, i2) in zip(table, table[1:]):
+        a, b = max(f1, lo), min(f2, hi)
+        if b > a:
+            total += 0.5 * (i1 * i1 + i2 * i2) * (b - a)
+
+    def at(f):
+        return min(table, key=lambda r: abs(r[0] - f))
+
+    return {"method": "ngspice .noise at CLK=VDD, inputs at Vcm",
+            "band_hz": [lo, hi],
+            "band_source": f"1/(2*pi*{delay_ns:g} ns) regeneration bandwidth",
+            "density_nv_rtHz": {"1k": at(1e3)[2] * 1e9,
+                                "1M": at(1e6)[2] * 1e9,
+                                "100M": at(1e8)[2] * 1e9,
+                                "1G": at(1e9)[2] * 1e9},
+            "integrated_uv": (total ** 0.5) * 1e6,
+            "note": "small-signal at the decision point; excludes transient "
+                    "regeneration statistics, includes the PDK flicker terms "
+                    "only inside the stated band"}
+
+
 def comparator(profile, deck_path, params=None, vdd=None, span_mv=40.0,
                iterations=9):
     deck_path = os.path.abspath(os.path.expanduser(deck_path))
@@ -329,20 +398,30 @@ Xc inp inn clk outp outn vdd vss SARADC_CMP_STRONGARM
         rc, log = run(net, tmp)
         data = rows(log) if rc == 0 else []
         if data:
-            # first time the outputs differ by more than half the supply
+            # ngspice prints an Index column first: [index, time, v(outp), v(outn)].
+            # row[0] is the sample number, not seconds.
             for row in data:
                 if abs(row[-2] - row[-1]) > 0.5 * vdd:
-                    delay_ns = row[0] * 1e9 - 1.0      # minus the 1 ns clk delay
+                    t_s = row[1] if len(row) >= 4 else row[0]
+                    delay_ns = t_s * 1e9 - 1.0      # minus the 1 ns clk delay
                     break
 
-    return {"topology": "cmp_strongarm",
-            "geometry_um": params, "vdd": vdd,
-            "offset_uv": (lo + hi) / 2.0 * 1e6,
-            "delay_ns": delay_ns,
-            "method": f"bisection on the decision over +-{span_mv:g} mV, "
-                      f"{iterations} iterations",
-            "note": "systematic offset only; mismatch was not measurable, so this "
-                    "is not an offset distribution"}
+    noise = comparator_noise(profile, deck_path, params, vdd, delay_ns)
+    result = {"topology": "cmp_strongarm",
+              "geometry_um": params, "vdd": vdd,
+              "offset_uv": (lo + hi) / 2.0 * 1e6,
+              "delay_ns": delay_ns,
+              "noise": noise,
+              "method": f"bisection on the decision over +-{span_mv:g} mV, "
+                        f"{iterations} iterations",
+              "note": "systematic offset only; mismatch was not measurable, so this "
+                      "is not an offset distribution"}
+    if "integrated_uv" in noise:
+        result["sigma_uv"] = noise["integrated_uv"]
+        result["sigma_source"] = (f"input-referred noise {noise['band_hz'][0]:.0e}-"
+                                  f"{noise['band_hz'][1]:.0e} Hz, AC .noise at the "
+                                  f"decision point")
+    return result
 
 
 # --------------------------------------------------------------------------

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """What the switch parasitic actually does to the CDAC weights.
 
-No layout exists yet, so this is not PEX.  It is a parasitic-aware schematic
-netlist built from two measured numbers:
+Two measured numbers feed this:
 
   * the unit capacitor C(V) curve (measured on the real deck),
-  * the transmission-gate off-capacitance at the DAC node (measured on the
-    real deck), 4.63 fF for the 4x gate that was selected.
+  * the transmission-gate off-capacitance at the DAC node.  The schematic
+    bench gives 4.63 fF for the 4x gate; the layout PEX of the same gate
+    (layout_check.py --device tg) gives 7.708 fF, of which 3.075 fF is the
+    cell's own routing.  The default here is the PEX number, because that is
+    what a bit node actually sees.
+
+The analytic table is still a bound, not a simulation of the array: the
+schematic AC check does not reproduce it (see README).
 
 The point is the asymmetry nobody budgets for: every bit node carries the same
 off-capacitance, but bit i only carries 2^i unit capacitors.  A fixed parasitic
@@ -125,7 +130,7 @@ def analytic(nbits, cu_ff, cp_ff):
     return rows
 
 
-def report(profile, nbits=8, cu_ff=2.673, cp_ff=4.63):
+def report(profile, nbits=8, cu_ff=2.673, cp_ff=7.708):
     rows = analytic(nbits, cu_ff, cp_ff)
     worst = min(rows, key=lambda r: r["attenuation"])
     # DNL at the worst bit if every lower bit were ideal: the weight error of
@@ -152,9 +157,9 @@ def human(r, sim=None):
               f"  implied DNL up to {r['max_dnl_lsb']:.2f} LSB",
               "",
               "  This is an UPPER BOUND under the stated Cp, not a measurement.",
-              "  It assumes the off-throw presents Cp at every bit node at every",
-              "  bias. The schematic AC check does not reproduce it, so the bound",
-              "  is unconfirmed until layout + PEX exist."]
+              "  Cp comes from the TG layout PEX, but the bound still assumes it",
+              "  sits at every bit node at every bias; the schematic AC check does",
+              "  not reproduce that, so it must not size the array."]
     if sim:
         lines += ["", "  simulated check (transient charge integration):"]
         for s in sim:
@@ -174,7 +179,7 @@ def main(argv):
     ap.add_argument("--deck")
     ap.add_argument("--nbits", type=int, default=8)
     ap.add_argument("--cu-ff", type=float, default=2.673)
-    ap.add_argument("--cp-ff", type=float, default=4.63)
+    ap.add_argument("--cp-ff", type=float, default=7.708)
     ap.add_argument("--simulate", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out")

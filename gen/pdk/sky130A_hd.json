@@ -36,9 +36,9 @@
       "kind": "moscap",
       "density_ff_um2": 4.243,
       "density_typ_ff_um2": 5.979,
-      "ac_pct_um": 1.0,
+      "ac_pct_um": 0.234,
       "min_geom_area_um2": 0.63,
-      "source": "density measured, mismatch assumed",
+      "source": "measured",
       "measurement": {
         "deck": "sky130 corners/tt.spice flattened, nfet_01v8 + pfet_01v8",
         "geometry_um": {
@@ -66,7 +66,21 @@
         },
         "c_typ_ff": 3.767,
         "c_flatband_min_ff": 2.673,
-        "note": "C is bias dependent: flat band collapses to 71% of the inversion/accumulation value. density_ff_um2 stores the flat-band minimum so array sizing stays conservative; density_typ_ff_um2 is the usable value. A_C could not be extracted: the PDK oxide-mismatch term gave zero spread in AC analysis, so ac_pct_um is still an estimate."
+        "note": "C is bias dependent: flat band collapses to 71% of the inversion/accumulation value. density_ff_um2 stores the flat-band minimum so array sizing stays conservative; density_typ_ff_um2 is the usable value. Mismatch A_C is measured from the PDK's own Pelgrom term (40 runs at each of two areas).",
+        "mismatch": {
+          "model": "PDK mismatch model (MC_MM_SWITCH=1, AGAUSS term), ngspice MC",
+          "runs": 40,
+          "areas_um2": [
+            0.63,
+            2.52
+          ],
+          "sigma_rel_pct": [
+            0.293,
+            0.148
+          ],
+          "ac_pct_um_fit": 0.234,
+          "note": "1/sqrt(area) holds: doubling sigma at 4x area measured 1.98x, and the single-area A_C agrees to 1% (0.2327 vs 0.2351). MC_MM_SWITCH must be declared after the deck include; the deck defines it as 0."
+        }
       }
     },
     {
@@ -227,9 +241,9 @@
   },
   "comparator": {
     "strongarm": {
-      "sigma_uv": 1000.0,
+      "sigma_uv": 500.4,
       "delay_ns": 0.101,
-      "source": "offset+delay measured, noise assumed",
+      "source": "measured",
       "offset_uv": 546.9,
       "measurement": {
         "deck": "sky130 corners/tt.spice flattened",
@@ -240,7 +254,21 @@
         },
         "vdd": 1.8,
         "method": "bisection on the decision over +-40 mV, 9 iterations",
-        "note": "systematic offset only; mismatch was not measurable, so this is not an offset distribution"
+        "note": "systematic offset only; mismatch was not measurable, so this is not an offset distribution. delay and noise come from the transient and .noise runs respectively.",
+        "noise": {
+          "method": "ngspice .noise at CLK=VDD, inputs at Vcm",
+          "band_hz": [
+            100000000.0,
+            1568000000.0
+          ],
+          "band_source": "1/(2*pi*0.1015 ns) regeneration bandwidth",
+          "density_nv_rtHz": {
+            "1M": 85.9,
+            "100M": 16.9,
+            "1G": 12.5
+          },
+          "note": "small-signal at the decision point; the 1/f term below 100 MHz is outside the band, so this is the regeneration noise, not the full sampled noise"
+        }
       }
     },
     "double_tail": {

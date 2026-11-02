@@ -26,8 +26,8 @@
     "tech_lef": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.ref/gf180mcu_fd_sc_mcu7t5v0/techlef/gf180mcu_fd_sc_mcu7t5v0__nom.tlef"
   },
   "devices": {
-    "nmos": "gf180mcu_fd_pr__nfet_05v0",
-    "pmos": "gf180mcu_fd_pr__pfet_05v0"
+    "nmos": "nfet_05v0",
+    "pmos": "pfet_05v0"
   },
   "cap_options": [
     {
@@ -93,15 +93,20 @@
   "qualified": false,
   "default_cap": "mim",
   "analog": {
-    "status": "scaffold",
+    "status": "supported",
     "style": "subckt",
     "finger_param": "nf",
     "sizing_um": {
       "wn": 0.5,
       "wp": 1.0,
-      "l": 0.4
+      "l": 0.5
     },
     "cap_backend": "mim",
-    "notes": "5V device subckt names are not verified in this checkout; generation fails closed"
+    "notes": "device names read from the installed gf180mcuD ngspice deck (sm141064.spice): .subckt nfet_05v0/pfet_05v0, nf finger param, SI w/l. Simulate with design.spice included first and `.lib sm141064.spice <corner>` from the deck directory.",
+    "model_deck": {
+      "params": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/design.spice",
+      "lib": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/sm141064.spice typical",
+      "cwd": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice"
+    }
   }
 }

@@ -78,10 +78,9 @@ def run_ngspice(netlist, workdir):
     return proc.returncode, proc.stdout + proc.stderr
 
 
-def smoke_cap(manifests, workdir, vdd):
+def smoke_cap(manifests, workdir, vdd, nmos, pmos):
     circuit = read(os.path.join(manifests["cap_unit"], "circuit.spice"))
-    net = MODELS + bind_devices(circuit, "sky130_fd_pr__nfet_01v8",
-                                "sky130_fd_pr__pfet_01v8") + f"""
+    net = MODELS + bind_devices(circuit, nmos, pmos) + f"""
 Vsh vsh 0 dc {vdd/2}
 Vfl fl 0 dc {vdd/2}
 Vnw vnw 0 dc {vdd}
@@ -98,10 +97,9 @@ Xc vsh fl vnw vpw SARADC_CAP_UNIT
             "models": "level1-smoke"}
 
 
-def smoke_tg(manifests, workdir, vdd):
+def smoke_tg(manifests, workdir, vdd, nmos, pmos):
     circuit = read(os.path.join(manifests["switch_tg"], "circuit.spice"))
-    net = MODELS + bind_devices(circuit, "sky130_fd_pr__nfet_01v8",
-                                "sky130_fd_pr__pfet_01v8") + f"""
+    net = MODELS + bind_devices(circuit, nmos, pmos) + f"""
 Vdd vdd 0 dc {vdd}
 Vin z1 0 dc {vdd*0.5}
 Vs s 0 dc 0
@@ -127,10 +125,9 @@ Xsw s sb z1 z2 vdd 0 SARADC_SW_TG
             "models": "level1-smoke"}
 
 
-def smoke_cmp(manifests, workdir, vdd):
+def smoke_cmp(manifests, workdir, vdd, nmos, pmos):
     circuit = read(os.path.join(manifests["cmp_strongarm"], "circuit.spice"))
-    net = MODELS + bind_devices(circuit, "sky130_fd_pr__nfet_01v8",
-                                "sky130_fd_pr__pfet_01v8") + f"""
+    net = MODELS + bind_devices(circuit, nmos, pmos) + f"""
 Vdd vdd 0 dc {vdd}
 Vip inp 0 dc {vdd*0.55}
 Vin inn 0 dc {vdd*0.45}
@@ -157,7 +154,9 @@ Xc inp inn clk outp outn vdd 0 SARADC_CMP_STRONGARM
 SMOKES = {"cap_unit": smoke_cap, "switch_tg": smoke_tg, "cmp_strongarm": smoke_cmp}
 
 
-def run(manifests, vdd=1.8, only=None):
+def run(manifests, vdd=1.8, only=None, devices=None):
+    devices = devices or {"nmos": "sky130_fd_pr__nfet_01v8",
+                          "pmos": "sky130_fd_pr__pfet_01v8"}
     results = []
     for name, fn in SMOKES.items():
         if only and name not in only:
@@ -166,7 +165,7 @@ def run(manifests, vdd=1.8, only=None):
             continue
         with tempfile.TemporaryDirectory(prefix="adcgen_smoke_") as tmp:
             try:
-                results.append(fn(manifests, tmp, vdd))
+                results.append(fn(manifests, tmp, vdd, devices['nmos'], devices['pmos']))
             except Exception as exc:                      # noqa: BLE001
                 results.append({"topology": name, "pass": False,
                                 "check": "harness error", "error": str(exc)})
@@ -188,7 +187,7 @@ def main(argv):
     manifests = {name: os.path.join(args.dir, name)
                  for name in SMOKES
                  if os.path.isfile(os.path.join(args.dir, name, "circuit.spice"))}
-    results = run(manifests, profile["vdd"])
+    results = run(manifests, profile["vdd"], devices=profile["devices"])
     if args.json:
         print(json.dumps(results, indent=2))
     else:
