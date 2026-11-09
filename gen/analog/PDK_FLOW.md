@@ -224,6 +224,100 @@ At the LEF's 0.763 fF/um^2 those are 0.069 / 0.017 / 0.049 um^2, matching the
 drawn M1 areas (VSS rail ~0.9 x 0.08 um). Before the fix the same net was
 0.87257 pF, i.e. 1.6e4 times too large.
 
+### Third defect: contacts never bridge planes (local overlay)
+
+Even with the two fixes above the tech does not *connect* anything across a
+layer change. A 0.09 um via1 between m1 and m2 extracts as two nodes
+(`m1_...` and `m2_...`); a `ct` between ndiff and m1 leaves the diffusion
+net and the m1 net separate. Leaf cells hid it (every net they need is
+reachable on one plane), but any cross-plane route silently became an open
+circuit -- see the array section below, where it invalidated a whole slice
+iteration.
+
+Cause: the `connect` section listed the contact/via **types** explicitly
+
+```
+m1,v1   m1,v1
+```
+
+Magic's `DBTechFinalConnect()` strips contact types back out of the
+plane-connectivity table when they appear there, leaving the contact with no
+plane bridge. Bridging must come from the `contact` section alone; `connect`
+should carry same-plane connectivity as plain type globs. (Same pattern as
+`gf180mcuD.tech` and `sky130A.tech`, both known good.)
+
+Fix is a local overlay, the PDK file stays untouched:
+
+- `gen/analog/ics55_magic_fix.tech` -- the PDK tech with:
+  `connect` `m1,v1 -> *m1` (resp. m2..m5), `contact` renamed to the canonical
+  first alias with canonical plane names (`via1 metal1 metal2`, ...), and the
+  `viaN` aliases added to the metal `types` lines so those names resolve.
+- `gen/analog/ics55_magic_fix.magicrc` -- `ics55.magicrc` with the one
+  `tech load` line pointing at the overlay.
+
+Verified with a 2-plane probe (m1 plate / 0.09 via1 / m2 plate): PDK tech
+2 nodes, overlay 1 node; diff probe (np+active / ct / m1): 2 nodes -> 1.
+`magic_pex` in `pdk_flow.py` now uses the overlay automatically
+(`ics55_rc()`), which also defragments the shipped inverter:
+
+```
+C0 VSS SUB 0.06001f   C1 A SUB 0.01637f
+C2 Y SUB 0.05269f     C3 VNW SUB 0.0595f      (2 devices, 4 caps)
+```
+
+vs 13 single-layer floating caps with the PDK tech. The overlay is the
+matching `contact`+`connect` pattern gf180 uses, not a ics55-specific trick;
+upstreaming it into `/grid/icsprout55-pdk` is a separate decision (it is a
+shared PDK checkout, so it was not edited here).
+
+### ics55 SPICE deck for Xyce
+
+The vendor deck is HSpice-shaped: `hspice/model_wrapper1_hsp.lib` is a set of
+`.LIB` corners around `mos/*.mdl`, and the model cards are not directly
+loadable by another simulator. `gen/analog/deck.py --ics55-xyce` flattens it
+into one file for Xyce 7.10 (BSIM4 level 54). Four traps, in the order they
+bite:
+
+1. **One bin per device.** `nhvt.mdl`/`phvt.mdl` hold 20 `.model` cards with
+   `lmin/lmax/wmin/wmax` brackets. Loading all 20 makes model selection
+   ambiguous. Keep the single card that brackets the requested geometry and
+   rename it to the bare device name (`nm1p2_hvt_lp`). For W=1 um / L=60 nm
+   that is `nm1p2_hvt_lp_core.6` / `pm1p2_hvt_lp_core.7`.
+2. **The corner deltas are not zero by omission.** Every quoted expression
+   references `<d*>_<device>` corner terms and, in the svt/lvt files, vendor
+   `<device>_*_retgt` hooks that the `tt` section never defines. Xyce aborts
+   with `Parameter VTH0 ... contains unrecognized symbols`. Both families are
+   0 in `tt`: bake device-named symbols to 0.
+3. **svt/lvt are interpolated, not binned.** `nsvt.mdl` etc. are a *single*
+   card whose parameters come from HSpice `select6`/`selectp7`/`evalbin`
+   macros over a W/L grid. Xyce has no such macros. `gen/analog/hspice_expr.py`
+   evaluates the vendor's own `.param` function definitions for the requested
+   W/L and emits literal numbers, which makes those cards **geometry-locked**
+   (regenerate the deck when W/L changes). `prelayout` and `mismod` are
+   subckt arguments in the wrapper and must be declared globally
+   (`prelayout=0`).
+4. **Warnings are benign.** Xyce warns that the card declares BSIM4 4.5 and
+   uses its oldest supported version (4.6.1), clamps `pbswgd` to 0.1, and
+   resets source/drain conductance for devices without explicit
+   `sa/sb/as/ad/ps/pd`. Pass those explicitly on the instance.
+
+Recipe and spot check:
+
+```
+make -C gen deck-ics55          # -> gen/outputs/deck/ics55_tt.spice
+```
+
+Measured at W=1 um, L=60 nm, |Vd|=|Vg|=1.2 V:
+
+```
+hvt  nmos 393 uA   pmos 203 uA
+svt  nmos 559 uA   pmos 309 uA
+```
+
+The pmos/nmos ratio (~0.52-0.55) and the svt-over-hvt current gain are both
+what the VT split predicts, which is the sanity check that the interpolated
+svt card resolved to the right corner and not to a neighbouring bin.
+
 ## Own leaves per PDK: what the device cells give us
 
 The next step after the shipped-cell proof is to draw our own `cap_unit` and
@@ -303,9 +397,207 @@ port), then gf180 (generator or stdcell internals).
 ## Next steps, in order
 
 1. ihp leaf: strap the `nmos`/`pmos` gates to met1, add tap cells, then build
-   `cap_unit` (gates on VSH, S/D/B on FL/VNW/VPW) and prove it.
+   `cap_unit` (gates on VSH, S/D/B on FL/VNW/VPW) and prove it.  (done)
 2. ics55: port `ics55_mos_analog.py` from `klayout.db` to `pya`, then build
-   the same leaf and re-run DRC/LVS/PEX.
+   the same leaf and re-run DRC/LVS/PEX.  (done)
 3. gf180: drive Magic's `gf180mcuD.tcl` device generator or lift the internal
-   devices out of a stdcell, then build the leaf.
-4. Array-level per-bit PEX on top of the leaves.
+   devices out of a stdcell, then build the leaf.  (done)
+4. Array-level per-bit PEX on top of the leaves.  (sky130 slice done, below)
+5. switch_tg leaf on ihp / gf180 / ics55 -- the only leaf still missing
+   before a CDAC can be assembled on those PDKs.
+
+## ihp switch_tg -- DONE
+
+`gen/analog/layout_ihp_tg.py` composes `nmos` + `pmos` from
+`sg13g2_pr.gds` with the proven gate-strap + tap recipe, crossing the
+S/D pairing (Z1 = nmos-left + pmos-left, Z2 = nmos-right + pmos-right)
+with straps routed AROUND the gate pad because the pad-right-diffusion
+gap is only 0.06 um.
+
+Output `gen/outputs/pdk_flow/ihp/tg/switch_tg.gds`:
+
+    DRC  0 items (ihp-sg13g2.drc)
+    LVS  "Netlists match" (sg13g2.lvs, disable_tap_extraction=true)
+    PEX  Z1 0.296 fF, Z2 0.329 fF, S 0.149, SB 0.144, VSS 0.674, VDD 0.176
+
+Two traps that cost a full iteration:
+
+* Pin text must go on **8/25**, not 8/2.  Only 8/25 is read as a port
+  by the LVS deck (flag_missing_ports errors otherwise).
+* The schematic `.SUBCKT` pin order must equal the layout's
+  alphabetical pin order `S SB VDD VSS Z1 Z2`, and device params must
+  carry the `u` suffix (`L=0.13u W=0.15u`) -- `w=0.15u l=0.13u`
+  silently mismatches the extracted values.
+
+## gf180 switch_tg -- DONE
+
+`gen/analog/layout_gf180_tg.py` draws both fets from the primitive
+layer map (same recipe as layout_gf180_dev.py / _cap.py), nmos below
+pmos, Z1 on a plain m1 riser, Z2 hopping to metal2 (via1 = fixed 0.26
+um) because the body-tap m1 pad at x 2.45-2.95 blocks the only clear
+m1 lane on the right.
+
+Output `gen/outputs/pdk_flow/gf180/tg/switch_tg.gds`:
+
+    DRC  0 hard items (8 whole-die density polygons -- intrinsic to a
+         single primitive cell, same as the proven leaves)
+    LVS  "Circuits match uniquely" (Magic ext2spice lvs + netgen,
+         X-style schematic, bodies named by well text labels)
+    PEX  Z1 0.584 fF, Z2 0.828 fF, S 0.317, SB 0.326, VSS 3.59, VDD 2.73
+
+Trap: a Z riser beside the device must clear the body-tap m1 pad by
+0.23 um or it shorts Z to the well and Magic reports
+"VDD/VSS/Z2 electrically shorted".  The netgen schematic pin order
+must equal Magic's emitted order `Z1 S SB Z2 VSS VDD`.
+
+## ics55 switch_tg -- DONE
+
+`gen/analog/layout_ics55_tg.py` instantiates the corrected PCell
+(ics55_mos.py) with `guard_ring=1 ring_metal=1` -- the ring metal is
+where the deck expects the VDD/VSS labels; a bare S/D strap would
+short a rail onto a Z net.  nmos and pmos sit side by side; each Z net
+is one horizontal metal2 bar between the two same-x S/D straps' vias
+(a riser plus crossbar overlaps the twin net and prints `Z1|Z2`).
+
+Output `gen/outputs/pdk_flow/ics55/tg/switch_tg.gds`:
+
+    DRC  0 items (ics55_drc.drc, no_density)
+    LVS  "Netlists match" (run_lvs.py default deep mode, M-style
+         schematic, pin order S SB VDD VSS Z1 Z2)
+    PEX  Z1 0.078 fF, Z2 0.078 fF, S/SB 0.034, VSS/VDD 1.90
+
+Traps: via1 is a fixed 0.09 um square; a Z riser must not cross the
+guard ring (put rings on both devices, or route Z between the S/D
+straps); the deck's strict_topology path fails on this flat cell --
+the default deep run_mode is what passes.
+
+## sky130 array slice: per-bit node PEX
+
+`gen/analog/layout_array.py` tiles a 4-bit slice (1/2/4/8 cap units +
+one 4x TG per bit) and names each bit's switched-plate node.  Outputs
+under `gen/outputs/layout/array/`:
+
+```
+drc   0 items (sky130A_mr.drc, feol+beol forced on)
+pex   B0 6.42   B1 7.70   B2 9.11   B3 12.11 fF   (VSH bus 5.14 fF)
+```
+
+Per-node breakdown is in `pex_per_bit.json`.  The large VSUBS term
+(4.0 -> 5.7 fF) is the cap cells' own S/D junction capacitance and
+scales with 2^i -- it is intrinsic bit weight, not routing parasitic.
+The constant per-bit offset beyond device caps is ~1.3 fF (VDD coupling
+1.0 + TG device 0.3), much smaller than the single-cell 3.075 fF Z2
+probe suggested, because the Z1/Z2 strap parallel-run was a property of
+the standalone cell, not the array.  The strap routing adds almost
+nothing.  This supports array_impact's fixed-Cp model with Cp ~1.3 fF,
+far below the 7.7 fF bound -- the LSB keeps ~67% of its weight instead
+of 26%, implied DNL ~0.7 LSB not 2.8.
+
+Layout traps worth remembering:
+
+* The TG leaf's Z2 rail starts at cell-local x=485, Z1 ends at x=3540.
+  A strap that only reaches the cell edge lands on the wrong rail.
+* A 12.7 um TG spans ~3 cap rows.  Stagger them DECREASING in x
+  (bit 0 rightmost) so each bit strap ends inside its own TG without
+  crossing another cell's body; an increasing stagger merges every bit.
+* A shared vertical REF bar needs its Z1 stubs routed around, not
+  through, the rows above.  Per-bit REF stubs are simpler and enough
+  for a Z2-side PEX.
+
+## ihp 4-bit array slice -- DONE
+
+`gen/analog/layout_ihp_array.py` tiles the same slice with the IHP cap
+(`cap_unit3`) and TG (`SARADC_SW_TG_IHP`) leaves.  Outputs under
+`gen/outputs/pdk_flow/ihp/array/`:
+
+```
+drc   0 items (ihp-sg13g2.drc)
+pex   B0 1.62   B1 2.31   B2 3.85   B3 7.05 fF   VSH 13.15   VDD 8.98
+      REF0..3 ~0.45 fF each   (38 devices, 118 caps)
+```
+
+Nets verified independent in `SARADC_ARRAY_IHP_4B_flat.ext`: VDD ties
+all 15 cap VNW pads + all 4 TG VDD taps; B_i equivs exactly TG_i.Z2;
+REF_i equivs exactly TG_i.Z1.  B ratios 1.00/1.43/2.38/4.35 against
+ideal 1/2/4/8 -- cap S/D junction loading (the VPW term) dominates as
+on sky130.
+
+Leaf changes the array needed:
+
+* `layout_ihp_cap.py`: FL keeps an m1 rail inside the cell PLUS an
+  via1+m2 tap pad (0.34-0.66, y0.02-0.28) for the m2 bit strap; the ntap
+  gets a via1+m2 VNW pad (m2 1.44-1.94, y2.60-3.25; via1 1.55-1.74,
+  y2.66-2.85 -- the via must sit INSIDE the tap's m1 window top 2.89
+  or V1.c fires).
+* `layout_ihp_tg.py`: both Z risers run to a y2.95 crown; Z2 (LEFT
+  riser) gets via1+m2 crown pad (m2 -0.50..-0.17, y2.74-2.95).
+
+Routing that finally worked:
+
+* Bit straps on METAL2 along the row bottom to the column under the
+  TG's Z2 riser, then an m2 riser + square landing pad merging into
+  the leaf's crown pad.  An L-corner without the pad leaves sub-width
+  slivers (M2.a).
+* VDD: per-row m2 band at y3.16-3.37 (above every m2 crown pad),
+  m2 risers onto each cap's VNW pad, via1+m2 riser at the TG tap's
+  right end (x tg_x+1.76-1.98 -- left of it the Z1 m1 stub and the
+  Z2 m2 crown pad crowd the tap).  Rows tied by an M1 spine at
+  x2.14-2.54, the only column empty of cap m1 (cap m1 ends at 1.94,
+  next cap starts at 2.83).
+* REF_i: m1 stub on the Z1 riser crown extending LEFT (x tg_x+0.78-
+  1.16, y2.90-3.18).  Extending right 0.20 um reaches the ntap m1 pad
+  at x1.34 and equivs REF_i to TG_i.VDD.
+* VSH: m2 bus x-0.85..-0.65 + per-cap drops to the m2 gate pad --
+  unchanged from before.
+
+Dead ends (do not retry):
+
+* An m1 VDD band across the tap row cannot work: the cap pmos FL rail
+  (ends y2.48) and the Z1 crown band leave a <0.2 um corridor, so any
+  band notches M1.a or gaps M1.b wherever a tap doesn't reach.
+* An m2 VDD spine in the left margin (x-0.75..-0.30) hits the VSH m2
+  column at x-0.85..-0.65.
+* An m2 VDD band at the VNW pad height (y2.29-2.89) crosses the B
+  strap's m2 riser (rises to y2.84) and the Z1/Z2 crown pads --
+  VDD equivs every port.  Any via to the TG tap through that band also
+  lands the band on the B riser.
+* IHP via1 is fixed min=max 0.19 um (V1.a); m1 must enclose it by
+  >=0.01 (V1.c) on all sides including the window's top edge.
+
+## ics55 4-bit array slice -- DONE
+
+`gen/analog/layout_ics55_array.py` tiles the same 4-bit slice (1/2/4/8 cap
+units + one ringed TG per bit).  Outputs under
+`gen/outputs/pdk_flow/ics55/array/` (notes + trap list in `README_NOTES.txt`):
+
+```
+drc   0 items (ics55_drc.drc, no_density)
+pex   B0 2.334   B1 3.439   B2 5.703   B3 10.287 fF
+      VSH 8.280   REF0..3 0.964 fF each   (38 devices, 25 caps)
+      increments 1.105 / 2.264 / 4.584 -> 1.00 / 2.05 / 4.15 (ideal 1/2/4)
+```
+
+Connectivity asserted on the flat netlist: for every bit the `B_i` net holds
+exactly `2^i` cap units (2 devices each, S=D=B_i) plus the two TG devices,
+`REF_i` holds exactly those two TG devices, and `VSH` holds no device.  The
+guard rings stay leaf-scoped (`switch_tg_n.VDD/.VSS` 1.90 fF floating), i.e.
+the route does not leak into the rails.
+
+Routing that works (the ring is the constraint):
+
+* ringed TG seals its core on m1, so the B_i entry lands **outside** the VSS
+  frame (cell-local x <= -1.745) and leaves on metal2: m1 strap at
+  y -0.86..-0.68 -> via1 0.09 at (tg_x-3.525, -0.765) -> m2 riser
+  x tg_x-3.62..-3.43 up to y 0.30 -> m2 toe at y 0.11..0.30 onto the leaf's
+  Z2 bar.
+* `REF_i` is a bare m2 bar at y -0.30..-0.11 straight onto the leaf's Z1 bar;
+  the riser stops 0.43 um short of it in x, the two bands are 0.22 apart in y.
+* `VSH` is an m1 bus at x -0.85..-0.65 (left of x=0, where every strap starts,
+  and left of the cap's leftmost m1 at -0.41) plus one drop per cap.
+* per-cap stub x+2.00..2.30 up into the FL bar keeps the strap 0.13 clear of
+  the caps' S/D m1 (ends y -0.55).
+
+The earlier ring-free TG variant (`build_tg_noring`, m1-only link bars) is
+deleted: it shorted Z1=Z2=VDD=B_i=REF_i and only existed because the tech
+defect made the m2 hop look impossible.  Row pitch 5.20, cap pitch 7.15,
+TG gap 1.50, stagger 0.80 decreasing.

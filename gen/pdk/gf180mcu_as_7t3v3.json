@@ -77,6 +77,38 @@
       "source": "assumption"
     }
   },
+  "ramp": {
+    "linearity_lsb_dnl": 0.25,
+    "step_settle_ns": 2.0,
+    "overhead_clocks": 2,
+    "clk_max_mhz": 150.0,
+    "source": "assumption",
+    "notes": "single-slope ramp: step-to-step linearity and the ramp-buffer settling are estimates; the clock ceiling is the profile's digital ceiling. There is no cap array, so DNL comes from the ramp, not from Pelgrom mismatch."
+  },
+  "sdm": {
+    "order": 2,
+    "quantizer_bits": 1,
+    "default_osr": 64,
+    "osr_max": 256,
+    "loading_db": 9.0,
+    "clk_max_mhz": 150.0,
+    "integrator_gbw_mhz": 100.0,
+    "source": "assumption",
+    "notes": "second-order 1-bit switched-cap loop. loading_db is the measured gap between the linearized NTF bound and the L1 bitstream simulation at 0.5 FS (9.0 dB, flat over OSR 16..64); it is not a stability margin estimate. Integrator GBW is an estimate. The decimator does not exist, so the reported ENOB assumes an ideal one."
+  },
+  "vco": {
+    "topology": "ring_dco",
+    "f_min_mhz": 7.802,
+    "f_max_mhz": 21.066,
+    "curvature_pct": 2.0,
+    "period_jitter_fs_rms": null,
+    "source": "assumption",
+    "measurement": {
+      "note": "f_max = measured ring-DCO TT frequency (21.07 MHz, PVT 21.07/15.74/26.60 MHz). The 2.7x range ratio is an assumption. Deterministic period RMS 0.11 ps is not random jitter.",
+      "vco_span_is_analog": false,
+      "curvature_pct_basis": "assumption: 4k x(1-x) tuning deviation fitted to nothing; flagged as unverified"
+    }
+  },
   "sim": {
     "ngspice_deck": "~/.ciel/ciel/gf180mcu/versions/792ef67037d74c8c51811eab3ce23cf793491296/gf180mcuD/libs.tech/ngspice/design.ngspice",
     "xyce_deck": null,

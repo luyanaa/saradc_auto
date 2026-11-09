@@ -79,9 +79,48 @@
       "source": "assumption"
     }
   },
+  "ramp": {
+    "linearity_lsb_dnl": 0.25,
+    "step_settle_ns": 2.0,
+    "overhead_clocks": 2,
+    "clk_max_mhz": 479.0,
+    "source": "assumption",
+    "notes": "single-slope ramp: step-to-step linearity and the ramp-buffer settling are estimates; the clock ceiling is the profile's digital ceiling. There is no cap array, so DNL comes from the ramp, not from Pelgrom mismatch."
+  },
+  "sdm": {
+    "order": 2,
+    "quantizer_bits": 1,
+    "default_osr": 64,
+    "osr_max": 256,
+    "loading_db": 9.0,
+    "clk_max_mhz": 479.0,
+    "integrator_gbw_mhz": 400.0,
+    "source": "assumption",
+    "notes": "second-order 1-bit switched-cap loop. loading_db is the measured gap between the linearized NTF bound and the L1 bitstream simulation at 0.5 FS (9.0 dB, flat over OSR 16..64); it is not a stability margin estimate. Integrator GBW is an estimate. The decimator does not exist, so the reported ENOB assumes an ideal one."
+  },
+  "vco": {
+    "topology": "ring_dco",
+    "f_min_mhz": 703.235,
+    "f_max_mhz": 1896.933,
+    "curvature_pct": 2.0,
+    "period_jitter_fs_rms": null,
+    "source": "measured_l3",
+    "measurement": {
+      "note": "L3 transistor-sparse DCO table on the ICS55 h7cr macro (27-point coarse/mid/fine grid, TT only). Full measured span 703.2..1896.9 MHz. The bank is DIGITALLY controlled: no analog tuning port was measured, so KVCO here is span/VFS and any analog-control nonlinearity is an assumption. The measured coarse characteristic is strongly nonlinear (1896.9/1002.7/759.3 MHz at coarse 0/8/15), so an open-loop transfer needs the coarse bank as a calibration map. No PEX/PVT/jitter signoff.",
+      "vco_span_is_analog": false,
+      "curvature_pct_basis": "assumption: 4k x(1-x) tuning deviation fitted to nothing; flagged as unverified"
+    }
+  },
   "sim": {
     "ngspice_deck": "/grid/icsprout55-pdk/libs.tech/spice/foundry/ngspice/ICsprout_55LLULP1225_V1p1_hsp.lib",
-    "xyce_deck": null,
+    "xyce_deck": "/grid/saradc_auto/gen/outputs/deck/ics55_tt.spice",
+    "xyce_recipe": "python3 gen/analog/deck.py --ics55-xyce --out gen/outputs/deck/ics55_tt.spice --devices nm1p2_svt_lp pm1p2_svt_lp --w-um 1 --l-um 0.06",
+    "xyce_verified": {
+      "simulator": "Xyce 7.10.0",
+      "model": "BSIM4 level 54. hvt bins nm1p2_hvt_lp_core.6 / pm1p2_hvt_lp_core.7 (L 54..72 nm, W 0.9..9.09 um); svt/lvt are single interpolated cards resolved numerically at the requested W/L.",
+      "measurement": "W=1 um, L=60 nm, |Vd|=|Vg|=1.2 V: hvt nmos 393 uA / pmos 203 uA; svt nmos 559 uA / pmos 309 uA.",
+      "note": "generated from model_wrapper1_hsp.lib .LIB tt + mos/*.mdl. One bin per binned device; d*_<device> deltas and <device>_*_retgt hooks are 0 in tt; sigma_mis_a..d and prelayout are declared global. The svt/lvt cards use HSpice select6/selectp7/evalbin macros that Xyce cannot expand, so gen/analog/hspice_expr.py evaluates them: those cards are geometry-locked to the (W, L) the deck was built with. Xyce warns the card declares BSIM4 4.5 and uses its oldest supported version (4.6.1)."
+    },
     "osdi_required": false,
     "license_note": "vendor model data, educational/research evaluation only; not released PDK collateral and not usable for signoff or production"
   },

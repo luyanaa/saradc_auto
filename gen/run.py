@@ -3,9 +3,11 @@
 
   run.py feasibility --spec S --pdk P     one spec on one PDK
   run.py matrix --spec S                  one spec on every PDK profile
-  run.py behavioral --spec S [--feas F]   L1 SAR DNL/INL/ENOB
+  run.py behavioral --spec S [--feas F]   L1 model chosen by spec["arch"]
   run.py report [--out FILE]              markdown matrix of all specs
-  run.py check                            profile paths that do not exist
+  run.py check                            profile inputs that do not exist
+                                          (generated decks under outputs are
+                                          reported, not failed)
 """
 
 from __future__ import annotations
@@ -21,9 +23,26 @@ sys.path.insert(0, os.path.join(HERE, "verify"))
 
 import feasibility  # noqa: E402
 import behavioral_sar  # noqa: E402
+import behavioral_ramp  # noqa: E402
+import behavioral_sdm  # noqa: E402
+import behavioral_vco  # noqa: E402
+
+BEHAVIORAL = {
+    "sar": behavioral_sar,
+    "ramp": behavioral_ramp,
+    "sdm": behavioral_sdm,
+    "vco": behavioral_vco,
+}
 
 PDK_DIR = os.path.join(HERE, "pdk")
 SPEC_DIR = os.path.join(HERE, "spec", "examples")
+OUTPUT_DIR = os.path.join(HERE, "outputs")
+
+
+def is_build_artifact(path):
+    """True for generated files under gen/outputs (not PDK inputs)."""
+    real = os.path.realpath(feasibility.expand(path))
+    return real.startswith(os.path.realpath(OUTPUT_DIR) + os.sep)
 
 
 def profiles():
@@ -94,19 +113,40 @@ def cmd_behavioral(argv):
     ap.add_argument("--spec", required=True)
     ap.add_argument("--sigma-cu", type=float)
     ap.add_argument("--from-feasibility")
+    ap.add_argument("--osr", type=int, help="override logic.osr (sdm)")
     ap.add_argument("--trials", type=int, default=10)
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--samples", type=int, default=1024)
+    ap.add_argument("--samples", type=int, help="FFT length (default: 65536 sdm, 1024 otherwise)")
     ap.add_argument("--bin", type=int, default=31)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
+    spec = load(args.spec)
+    arch = str(spec.get("arch", "sar")).lower()
+    backend = BEHAVIORAL.get(arch)
+    if backend is None:
+        raise SystemExit(f"no behavioral model for arch '{arch}'; "
+                         f"known: {', '.join(BEHAVIORAL)}")
+    if args.osr is not None:
+        spec.setdefault("logic", {})["osr"] = args.osr
+    samples = args.samples or (65536 if arch == "sdm" else 1024)
+
+    feas = None
+    if args.from_feasibility:
+        feas = load(args.from_feasibility)
     sigma = args.sigma_cu
-    if sigma is None and args.from_feasibility:
-        sigma = load(args.from_feasibility)["sigma_cu_rel"]
-    result = behavioral_sar.run(load(args.spec), sigma or 0.0, args.trials,
-                                args.seed, args.samples, args.bin)
-    print(json.dumps(result, indent=2) if args.json else behavioral_sar.human(result))
+    if sigma is None and feas is not None:
+        sigma = feas.get("sigma_cu_rel")
+
+    if arch == "vco":
+        result = backend.run(spec, sigma or 0.0, args.trials, args.seed,
+                             samples, args.bin, feas=feas)
+    elif arch == "sdm":
+        result = backend.run(spec, sigma or 0.0, 1, args.seed, samples)
+    else:
+        result = backend.run(spec, sigma or 0.0, args.trials, args.seed,
+                             samples, args.bin)
+    print(json.dumps(result, indent=2) if args.json else backend.human(result))
     return 0
 
 
@@ -116,9 +156,9 @@ def cmd_report(argv):
     ap.add_argument("--out")
     args = ap.parse_args(argv)
 
-    header = ("| spec | pdk | target | status | Cu fF | Ctot fF | binding | fs_max | "
-              "DNL(1s) | area um2 |\n"
-              "|---|---|---|---|---|---|---|---|---|---|")
+    header = ("| spec | pdk | arch | target | status | cap fF | Ctot fF | binding | "
+              "fs_max | DNL(1s) | area um2 |\n"
+              "|---|---|---|---|---|---|---|---|---|---|---|")
     lines = ["# ADC generator feasibility matrix", "", header]
     for spec_path in specs():
         spec = load(spec_path)
@@ -128,10 +168,12 @@ def cmd_report(argv):
             try:
                 r = feasibility.evaluate(spec, load(pdk_path))
             except KeyError as exc:
-                lines.append(f"| {name} | {pdk} | | FAIL_UNCHARACTERIZED | | | | | | {exc} |")
+                lines.append(f"| {name} | {pdk} | {spec.get('arch', 'sar')} | | "
+                             f"FAIL_UNCHARACTERIZED | | | | | | {exc} |")
                 continue
             lines.append(
-                f"| {name} | {pdk} | {r['fs_target']/1e3:.0f} kS/s | {r['status']} | "
+                f"| {name} | {pdk} | {r.get('arch', 'sar')} | "
+                f"{r['fs_target']/1e3:.0f} kS/s | {r['status']} | "
                 f"{r['cu_ff']:.3f} | {r['c_tot_ff']:.1f} | {r['binding_constraint']} | "
                 f"{r['fs_max']/1e3:.0f} kS/s | {r['dnl_msb_sigma_lsb']:.2f} | "
                 f"{r['area_cap_um2']:.0f} |"
@@ -157,12 +199,22 @@ def cmd_check(_argv):
         if prof.get("signoff", {}).get("magicrc"):
             fields.append(("signoff.magicrc", prof["signoff"]["magicrc"]))
 
-        missing = [(n, v) for n, v in fields if not os.path.exists(feasibility.expand(v))]
+        missing, artifacts = [], []
+        for name, value in fields:
+            if os.path.exists(feasibility.expand(value)):
+                continue
+            # a deck this repo generates (gen/outputs) is not a PDK input;
+            # `make deck-ics55` is what produces it
+            (artifacts if is_build_artifact(value) else missing).append((name, value))
+
         if missing:
             bad += len(missing)
             print(f"{prof['id']}: {len(missing)} missing")
             for name, value in missing:
                 print(f"    {name}: {feasibility.expand(value)}")
+        elif artifacts:
+            print(f"{prof['id']}: ok ({len(artifacts)} generated artifact(s) "
+                  f"absent; run the matching deck target)")
         else:
             print(f"{prof['id']}: ok")
     return 0 if bad == 0 else 1

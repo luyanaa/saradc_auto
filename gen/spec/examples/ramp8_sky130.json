@@ -1,0 +1,55 @@
+{
+  "design": "ramp8_sky130",
+  "arch": "ramp",
+  "pdk": "sky130A_hd",
+  "scl": "sky130_fd_sc_hd",
+  "resolution": 8,
+  "vdd": 1.8,
+  "fs_hz": 100000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "single_ended",
+    "vfs": 1.8
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 0
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 1,
+    "averaging": 1
+  },
+  "ramp": {
+    "linearity_lsb_dnl": 0.25,
+    "step_settle_ns": 2.0
+  },
+  "calibration": {
+    "offset": true,
+    "gain": true,
+    "weights": false
+  },
+  "physical": {
+    "array": "row",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex"
+    ]
+  }
+}

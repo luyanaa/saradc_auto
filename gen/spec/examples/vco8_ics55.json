@@ -1,0 +1,54 @@
+{
+  "design": "vco8_ics55",
+  "arch": "vco",
+  "pdk": "ics55_h7ch",
+  "scl": "ics55_LLSC_H7CR",
+  "resolution": 8,
+  "vdd": 1.2,
+  "fs_hz": 1000000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "single_ended",
+    "vfs": 1.2
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 0
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 1,
+    "averaging": 1
+  },
+  "vco": {
+    "curvature_pct": 2.0
+  },
+  "calibration": {
+    "offset": false,
+    "gain": false,
+    "weights": false
+  },
+  "physical": {
+    "array": "row",
+    "dummies": false,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex"
+    ]
+  }
+}

@@ -5,7 +5,7 @@ PDK  ?= sky130A_hd
 OUT  ?= $(ROOT)/gen/outputs
 TRIALS ?= 20
 
-.PHONY: all check matrix feas behavioral deck measure char analog layout pdk-flow report clean
+.PHONY: all check matrix feas behavioral deck deck-ics55 measure char analog layout pdk-flow report clean
 
 all: check matrix report
 
@@ -36,6 +36,20 @@ deck:
 		--corner-index $(SKY130_NGSPICE)/corners/tt.spice \
 		--wanted nfet_01v8__tt nfet_01v8__mismatch pfet_01v8__tt pfet_01v8__mismatch \
 		--out $(DECK)
+
+# ICsprout 55 nm deck for Xyce.  The svt/lvt cards are geometry-interpolated,
+# so this is built for one (W, L); see gen/analog/PDK_FLOW.md.
+ICS55_ROOT ?= /grid/icsprout55-pdk
+ICS55_DEVICES ?= nm1p2_svt_lp pm1p2_svt_lp
+ICS55_DECK ?= $(OUT)/deck/ics55_tt.spice
+ICS55_W ?= 1
+ICS55_L ?= 0.06
+
+deck-ics55:
+	mkdir -p $(OUT)/deck
+	cd $(ROOT) && $(PY) gen/analog/deck.py --ics55-xyce \
+		--pdk-root $(ICS55_ROOT) --devices $(ICS55_DEVICES) \
+		--w-um $(ICS55_W) --l-um $(ICS55_L) --out $(ICS55_DECK)
 
 measure: deck
 	cd $(ROOT) && $(PY) gen/analog/measure.py --pdk $(PDK) --deck $(DECK) \

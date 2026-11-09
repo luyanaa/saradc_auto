@@ -84,7 +84,36 @@
           "items": { "enum": ["behavioral", "lvs", "drc", "pex", "fft", "pvt"] }
         }
       }
-    }
+    },
+    "ramp": {
+      "type": "object",
+      "description": "Single-slope ramp overrides; the profile's ramp block is the default.",
+      "properties": {
+        "linearity_lsb_dnl": { "type": "number", "minimum": 0 },
+        "step_settle_ns": { "type": "number", "minimum": 0 },
+        "overhead_clocks": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sdm": {
+      "type": "object",
+      "description": "Delta-sigma loop overrides; the profile's sdm block is the default.",
+      "properties": {
+        "order": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "integrator_gain_db": { "type": "number", "minimum": 0 },
+        "osr_sweep": { "type": "array", "items": { "type": "integer", "minimum": 2 } }
+      }
+    },
+    "vco": {
+      "type": "object",
+      "description": "VCO/counter overrides; the profile's vco block is the default.",
+      "properties": {
+        "curvature_pct": { "type": "number", "minimum": 0 },
+        "period_jitter_fs_rms": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "t_window_ns": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "comparator_offset_lsb": { "type": "number", "minimum": 0, "default": 0 },
+    "comparator_noise_lsb": { "type": "number", "minimum": 0, "default": 0 }
   },
   "additionalProperties": false
 }

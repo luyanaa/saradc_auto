@@ -79,6 +79,38 @@
       "source": "assumption"
     }
   },
+  "ramp": {
+    "linearity_lsb_dnl": 0.25,
+    "step_settle_ns": 2.0,
+    "overhead_clocks": 2,
+    "clk_max_mhz": 400.0,
+    "source": "assumption",
+    "notes": "single-slope ramp: step-to-step linearity and the ramp-buffer settling are estimates; the clock ceiling is the profile's digital ceiling. There is no cap array, so DNL comes from the ramp, not from Pelgrom mismatch."
+  },
+  "sdm": {
+    "order": 2,
+    "quantizer_bits": 1,
+    "default_osr": 64,
+    "osr_max": 256,
+    "loading_db": 9.0,
+    "clk_max_mhz": 400.0,
+    "integrator_gbw_mhz": 200.0,
+    "source": "assumption",
+    "notes": "second-order 1-bit switched-cap loop. loading_db is the measured gap between the linearized NTF bound and the L1 bitstream simulation at 0.5 FS (9.0 dB, flat over OSR 16..64); it is not a stability margin estimate. Integrator GBW is an estimate. The decimator does not exist, so the reported ENOB assumes an ideal one."
+  },
+  "vco": {
+    "topology": "ring_dco",
+    "f_min_mhz": 12.3,
+    "f_max_mhz": 33.21,
+    "curvature_pct": 2.0,
+    "period_jitter_fs_rms": null,
+    "source": "assumption",
+    "measurement": {
+      "note": "f_max = measured ring-DCO TT frequency at the minimum delay code (33.21 MHz, cell-level transient, no RC); the 2.7x range ratio is an assumption carried over from the measured ics55 15/15/31-code bank. No random-jitter or phase-noise data.",
+      "vco_span_is_analog": false,
+      "curvature_pct_basis": "assumption: 4k x(1-x) tuning deviation fitted to nothing; flagged as unverified"
+    }
+  },
   "sim": {
     "ngspice_deck": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib",
     "xyce_deck": "~/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008/ihp-sg13g2/libs.tech/xyce/models/cornerMOSlv.lib",
