@@ -3,3 +3,6 @@
 
 # netgen comparison output from ad-hoc LVS runs
 comp.out
+
+# generated run artifacts (GDS, PEX, decks, reports)
+gen/outputs/
