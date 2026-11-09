@@ -5,7 +5,7 @@ PDK  ?= sky130A_hd
 OUT  ?= $(ROOT)/gen/outputs
 TRIALS ?= 20
 
-.PHONY: all check matrix feas behavioral deck deck-ics55 measure char analog layout pdk-flow report clean
+.PHONY: all check matrix feas behavioral deck deck-ics55 measure-ics55 measure char analog layout pdk-flow report clean
 
 all: check matrix report
 
@@ -40,7 +40,7 @@ deck:
 # ICsprout 55 nm deck for Xyce.  The svt/lvt cards are geometry-interpolated,
 # so this is built for one (W, L); see gen/analog/PDK_FLOW.md.
 ICS55_ROOT ?= /grid/icsprout55-pdk
-ICS55_DEVICES ?= nm1p2_svt_lp pm1p2_svt_lp
+ICS55_DEVICES ?= nm1p2_hvt_lp pm1p2_hvt_lp nm1p2_svt_lp pm1p2_svt_lp
 ICS55_DECK ?= $(OUT)/deck/ics55_tt.spice
 ICS55_W ?= 1
 ICS55_L ?= 0.06
@@ -50,6 +50,17 @@ deck-ics55:
 	cd $(ROOT) && $(PY) gen/analog/deck.py --ics55-xyce \
 		--pdk-root $(ICS55_ROOT) --devices $(ICS55_DEVICES) \
 		--w-um $(ICS55_W) --l-um $(ICS55_L) --out $(ICS55_DECK)
+
+# Measure the ics55 analog leaves against the flattened Xyce deck.  The
+# leaves are drawn at W=1 um / L=60 nm; the comparator uses wp=4*wn so the
+# precharge state stays above the latch trip point (wp=2 self-triggers
+# before the clock edge).
+measure-ics55: deck-ics55
+	mkdir -p $(OUT)
+	cd $(ROOT) && $(PY) gen/analog/measure_xyce.py --pdk ics55_h7ch \
+		--deck $(ICS55_DECK) --wn 1 --wp 1 --l 0.06 \
+		--cmp-wn 1 --cmp-wp 4 --cmp-l 0.06 \
+		--json --out $(OUT)/measure_ics55.json
 
 measure: deck
 	cd $(ROOT) && $(PY) gen/analog/measure.py --pdk $(PDK) --deck $(DECK) \

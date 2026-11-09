@@ -390,6 +390,42 @@ up is now a concrete, quantified next step instead of a guess.
 delay **0.101 ns**. Offset is measured by bisection on the decision; delay is
 the clk-to-50%-split time.
 
+### Measured ics55 leaves (Xyce deck)
+
+```sh
+make -C gen measure-ics55   # -> gen/outputs/measure_ics55.json, ~3 s
+```
+
+`measure_xyce.py` is the Xyce port of the two benches above. It writes bare
+`M` devices (the flat deck has no subckts) with the wrapper's `sa/sb` and
+physical junction areas. At the drawn leaf geometry (W=1 um, L=60 nm):
+
+```
+moscap  Wn/Wp 1/1   flat-band 1.327 fF, peak 1.755 fF
+        density     11.06 .. 14.62 fF/um^2        (assumed 5.0)
+TG      Wn/Wp 1/1   Ron max 74.6k, typ 17.0k ohm (assumed 220)
+        Coff        1.654 fF
+        x8 width    Ron max 8.63k, Coff 12.9 fF
+StrongArm Wn/Wp 1/4 offset +78.1 uV, delay 0.327 ns
+```
+
+The MOSCAP becomes the CDAC backend: the 4-bit array slice is drawn from
+nmos+pmos units, so `cap_backend`/`default_cap` are now `moscap`, and the
+measured density is 22x the old `mom` estimate. The TG number is the opposite
+story: hvt at 1.2 V has both devices at ~0.6 V overdrive and reverse body bias
+at mid-rail, so a 1 um switch is 74.6 kohm. The profile keeps the whole curve
+plus a width study; the matrix therefore reports `FAIL_SETTLING` for ics55 at
+1 MS/s with the 1 um switch, which is the honest sizing answer.
+
+The comparator also exposed a topology trap: with `Wp=2*Wn` the precharge
+equilibrium sits below the cross-latch trip point and the StrongArm resolves
+*before* the clock. `Wp=4*Wn` holds 1.057 V and waits for CLK.
+
+Two rows stay assumptions for concrete reasons: capacitor `A_C` and comparator
+`sigma_uv` need the vendor `agauss` statistical hooks, which the flat deck
+zeroes; and comparator noise needs `.noise`, which Xyce 7.10 reports as a zero
+spectrum even for a 1 kohm resistor.
+
 ### TG width vs bootstrap: the decision
 
 Both were measured with the PDK deck. The question was which switch carries
@@ -623,9 +659,15 @@ It reported 1114 ns instead of 0.101 ns. That is now `row[1]`.
   were never rewritten and every leaf failed. It now takes the names from the
   profile. Both gf180 profiles pass all three connectivity checks.
 - **ics55 stays fail-closed.** The wrapper names are real
-  (`nm1p2_hvt_lp`/`pm1p2_hvt_lp`, `nf`), but the deck says "for hspice only",
-  is evaluation-licensed, and the wrappers `.INC` HSpice `.mdl` files. ngspice
-  cannot run it, so claiming `supported` would be false.
+  (`nm1p2_hvt_lp`/`pm1p2_hvt_lp`, `nf`). `deck.py --ics55-xyce` now flattens
+  the `tt` corner into a bare-model deck that Xyce 7.10 runs, and
+  `measure_xyce.py` has measured the MOSCAP, TG and StrongArm against it. But
+  `macro_gen` emits the vendor *subckt* form (`X... nm1p2_hvt_lp w=..`), and
+  the flattened deck has no subckts; the vendor subckt form itself cannot run
+  in Xyce (the svt/lvt cards use HSpice `select`/`evalbin` macros). So
+  `analog.status` stays `scaffold` until the ics55 leaf generator emits bare
+  `M` devices (or a subckt wrapper is generated). The measurement bench writes
+  its own bare-device netlists and does not depend on `macro_gen`.
 
 Still missing: the CDAC array, per-bit PEX, and a real post-layout comparison.
 `qualified` stays `false`. The sky130 8-bit row does move from

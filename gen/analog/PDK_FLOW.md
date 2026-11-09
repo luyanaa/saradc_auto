@@ -318,6 +318,60 @@ The pmos/nmos ratio (~0.52-0.55) and the svt-over-hvt current gain are both
 what the VT split predicts, which is the sanity check that the interpolated
 svt card resolved to the right corner and not to a neighbouring bin.
 
+### ics55 analog measurements
+
+`gen/analog/measure_xyce.py` is the Xyce counterpart of `measure.py`/`char.py`
+and runs against the flattened deck (`make -C gen measure-ics55`). It emits
+bare `M` devices with the wrapper's `sa/sb` defaults and physical
+`as=ad=W*sa`, because leaving the junction areas at zero makes Xyce reset the
+S/D conductance and drops the junction capacitance. Measured at the drawn
+leaf geometry (W=1 um, L=60 nm; comparator Wp=4*Wn):
+
+| block | quantity | measured | previous assumption |
+|---|---|---|---|
+| moscap (n+p, W=1/1, L=0.06) | flat-band / peak C | 1.327 / 1.755 fF | 5.0 fF/um^2 |
+| moscap | density | **11.06 .. 14.62 fF/um^2** | 5.0 fF/um^2 |
+| TG (W=1/1, L=0.06) | Ron max / typ / min | **74.6k / 17.0k / 1.04k ohm** | 220 ohm |
+| TG | off-cap at DAC node | 1.654 fF | -- |
+| TG width study | x2 / x4 / x8 | Ron max 32.4k / 16.9k / 8.63k ohm, Coff 3.26 / 6.46 / 12.9 fF | -- |
+| StrongArm (Wn=1, Wp=4, L=0.06) | systematic offset | **+78.1 uV** | 1200 uV (random) |
+| StrongArm | clk->|outp-outn| 50 % | **0.327 ns** | 0.25 ns |
+
+Three findings that change how ics55 has to be sized:
+
+1. **The MOSCAP is the CDAC device.** The 4-bit array slice is built from
+   nmos+pmos units, so `cap_backend`/`default_cap` now point at `moscap`
+   instead of `mom`. The measured density is 22x the old MOM estimate, which
+   is why the 8-bit array area drops from ~320 um^2 to ~61 um^2 at the same
+   VFS. The flat-band value is stored as `density_ff_um2` (conservative: the
+   depleted channel is the smallest the cap gets) and the peak as
+   `density_typ_ff_um2`.
+2. **The hvt 1.2 V TG is weak at mid-rail.** At Vin ~ VDD/2 the nmos has
+   Vgs ~ 0.6 V and the source body is reverse-biased, so both devices lose
+   overdrive at once and Ron peaks at 74.6k ohm for W=1 um. The curve is in
+   the profile; widening to the 9 um bin edge cuts it ~9x, and a lower-VT
+   device or a bootstrap cuts it much further. Using the worst point in the
+   feasibility gate means the 1 um TG cannot do 8-bit SAR at 1 MS/s -- the
+   matrix now reports `FAIL_SETTLING` for ics55 with the 1 um switch, which
+   is a real sizing result, not a modelling artefact.
+3. **The StrongArm precharge ratio matters.** With Wp=2*Wn the precharge
+   equilibrium (0.977 V) sits below the cross-coupled latch trip point, and
+   the comparator regenerates from numerical noise *before* the clock edge.
+   Wp=4*Wn raises it to 1.057 V and the decision waits for CLK. The measured
+   delay uses the same |outp-outn| = VDD/2 threshold as the sky130 bench.
+
+Two assumptions remain, for concrete reasons:
+
+* **Capacitor Pelgrom A_C and comparator sigma_uv.** The vendor's statistical
+  hooks are HSpice `agauss` expressions inside the wrapper subckt, and the
+  flattened deck bakes every `d*_<device>_mis`/`_mismatch` term to zero. There
+  is no scatter to sample, so both rows keep their assumed coefficients and
+  the profile records `measured_density` / `measured_delay` rather than
+  `measured`.
+* **Comparator input noise.** Xyce 7.10's `.noise` runs but reports a zero
+  `onoise_spectrum`, even for a single 1 kohm resistor, so there is no
+  input-referred noise number (the sky130 value came from ngspice `.noise`).
+
 ## Own leaves per PDK: what the device cells give us
 
 The next step after the shipped-cell proof is to draw our own `cap_unit` and

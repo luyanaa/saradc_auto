@@ -33,40 +33,238 @@
   },
   "cap_options": [
     {
+      "name": "moscap",
+      "kind": "moscap",
+      "density_ff_um2": 11.0577,
+      "density_typ_ff_um2": 14.6237,
+      "ac_pct_um": 1.5,
+      "min_geom_area_um2": 0.12,
+      "source": "measured_density",
+      "notes": "1.2 V core oxide, non-linear C(V); density is the flat-band minimum (depleted channel), density_typ is the peak. A_C (%*um) is still an assumption: the vendor mismatch hooks are HSpice agauss expressions and the flattened deck zeroes them.",
+      "measurement": {
+        "deck": "gen/outputs/deck/ics55_tt.spice (flattened, .LIB tt)",
+        "simulator": "Xyce 7.10.0",
+        "geometry_um": {
+          "wn": 1.0,
+          "wp": 1.0,
+          "l": 0.06,
+          "n_parallel": 1
+        },
+        "area_um2": 0.12,
+        "vcm_v": 0.6,
+        "freq_hz": 1000000.0,
+        "c_ff_vs_vdiff": {
+          "-0.6": 1.7036,
+          "-0.5": 1.6882,
+          "-0.4": 1.623,
+          "-0.3": 1.3918,
+          "-0.2": 1.3269,
+          "-0.1": 1.3337,
+          "+0.0": 1.3439,
+          "+0.1": 1.3419,
+          "+0.2": 1.3586,
+          "+0.3": 1.4984,
+          "+0.4": 1.6811,
+          "+0.5": 1.7369,
+          "+0.6": 1.7548
+        },
+        "c_typ_ff": 1.6347,
+        "c_flatband_min_ff": 1.3269,
+        "c_max_ff": 1.7548,
+        "method": "1 MHz small-signal gate current, C = |Im(I(Vg))|/(2*pi*f), both devices with S/D/bulk on FL and the gate on VSH",
+        "note": "density_ff_um2 is the flat-band minimum (depleted channel, conservative for area); density_typ_ff_um2 is the peak. ac_pct_um is NOT measured: the vendor mismatch hooks are HSpice agauss expressions and the flat deck zeroes them.",
+        "ac_pct_um_source": "assumption"
+      }
+    },
+    {
       "name": "mom",
       "kind": "mom",
       "density_ff_um2": 0.5,
       "ac_pct_um": 0.8,
       "min_geom_area_um2": 0.3,
       "source": "assumption",
-      "notes": "vendor MOM subcircuit at libs.tech/spice/foundry/ngspice/mom/mom.ckt; density/Pelgrom are estimates"
-    },
-    {
-      "name": "moscap",
-      "kind": "moscap",
-      "density_ff_um2": 5.0,
-      "ac_pct_um": 1.5,
-      "min_geom_area_um2": 0.2,
-      "source": "assumption",
-      "notes": "1.2V core oxide, highest density, non-linear C(V)"
+      "notes": "vendor mom_2t behavioral model at libs.tech/spice/foundry/ngspice/mom/mom.ckt; density and Pelgrom are still estimates. The taped-out CDAC uses moscap units, not this device."
     }
   ],
   "c_parasitic_est_ff": 10.0,
   "switches": {
     "transmission_gate": {
-      "ron_ohm": 220.0,
-      "source": "assumption"
+      "ron_ohm": 74591.4,
+      "source": "measured",
+      "ron_typ_ohm": 17044.9,
+      "ron_min_ohm": 1038.6,
+      "c_off_ff": 1.6539,
+      "measurement": {
+        "deck": "gen/outputs/deck/ics55_tt.spice (flattened, .LIB tt)",
+        "simulator": "Xyce 7.10.0",
+        "geometry_um": {
+          "wn": 1.0,
+          "wp": 1.0,
+          "l": 0.06
+        },
+        "vdd": 1.2,
+        "method": "10 mV across the closed TG at Vg=rail, 11 input points; off-cap from the AC current into the DAC-side node with the gate off",
+        "note": "ron_ohm is the worst point over the input range, at mid-rail where both devices have minimum overdrive. hvt at 1.2 V is weak there: widening to the 9 um bin edge is the cheap lever, a lower-VT device or a bootstrap is the real one. The width study records the Ron/off-cap trade.",
+        "curve": [
+          {
+            "vin_v": 0.18,
+            "ron_ohm": 1038.6
+          },
+          {
+            "vin_v": 0.264,
+            "ron_ohm": 1480.4
+          },
+          {
+            "vin_v": 0.348,
+            "ron_ohm": 2468.9
+          },
+          {
+            "vin_v": 0.432,
+            "ron_ohm": 5222.6
+          },
+          {
+            "vin_v": 0.516,
+            "ron_ohm": 16115.5
+          },
+          {
+            "vin_v": 0.6,
+            "ron_ohm": 74591.4
+          },
+          {
+            "vin_v": 0.684,
+            "ron_ohm": 59935.1
+          },
+          {
+            "vin_v": 0.768,
+            "ron_ohm": 14267.4
+          },
+          {
+            "vin_v": 0.852,
+            "ron_ohm": 6080.0
+          },
+          {
+            "vin_v": 0.936,
+            "ron_ohm": 3674.7
+          },
+          {
+            "vin_v": 1.02,
+            "ron_ohm": 2618.8
+          }
+        ],
+        "width_study": [
+          {
+            "mult": 1,
+            "wn": 1.0,
+            "wp": 1.0,
+            "ron_max_ohm": 74591.42973264663,
+            "ron_typ_ohm": 17044.858611335392,
+            "c_off_ff": 1.6539240038210412
+          },
+          {
+            "mult": 2,
+            "wn": 2.0,
+            "wp": 2.0,
+            "ron_max_ohm": 32381.809721746573,
+            "ron_typ_ohm": 8031.853366021294,
+            "c_off_ff": 3.2550045558310075
+          },
+          {
+            "mult": 4,
+            "wn": 4.0,
+            "wp": 4.0,
+            "ron_max_ohm": 16887.376230308688,
+            "ron_typ_ohm": 3932.5641624433906,
+            "c_off_ff": 6.457002128146913
+          },
+          {
+            "mult": 8,
+            "wn": 8.0,
+            "wp": 8.0,
+            "ron_max_ohm": 8629.368717150799,
+            "ron_typ_ohm": 1949.8901215570777,
+            "c_off_ff": 12.860843592765674
+          }
+        ]
+      },
+      "geometry_um": {
+        "wn": 1.0,
+        "wp": 1.0,
+        "l": 0.06
+      },
+      "width_study": [
+        {
+          "mult": 1,
+          "wn": 1.0,
+          "wp": 1.0,
+          "ron_max_ohm": 74591.42973264663,
+          "ron_typ_ohm": 17044.858611335392,
+          "c_off_ff": 1.6539240038210412
+        },
+        {
+          "mult": 2,
+          "wn": 2.0,
+          "wp": 2.0,
+          "ron_max_ohm": 32381.809721746573,
+          "ron_typ_ohm": 8031.853366021294,
+          "c_off_ff": 3.2550045558310075
+        },
+        {
+          "mult": 4,
+          "wn": 4.0,
+          "wp": 4.0,
+          "ron_max_ohm": 16887.376230308688,
+          "ron_typ_ohm": 3932.5641624433906,
+          "c_off_ff": 6.457002128146913
+        },
+        {
+          "mult": 8,
+          "wn": 8.0,
+          "wp": 8.0,
+          "ron_max_ohm": 8629.368717150799,
+          "ron_typ_ohm": 1949.8901215570777,
+          "c_off_ff": 12.860843592765674
+        }
+      ]
     },
     "bootstrapped": {
       "ron_ohm": 60.0,
-      "source": "assumption"
+      "source": "assumption",
+      "notes": "not measured in this pass; the array uses the transmission gate. A bootstrap removes the mid-rail overdrive collapse the TG curve shows."
     }
   },
   "comparator": {
     "strongarm": {
       "sigma_uv": 1200.0,
-      "delay_ns": 0.25,
-      "source": "assumption"
+      "delay_ns": 0.3273,
+      "source": "measured_delay",
+      "offset_uv": 78.12,
+      "geometry_um": {
+        "wn": 1.0,
+        "wp": 4.0,
+        "l": 0.06
+      },
+      "measurement": {
+        "deck": "gen/outputs/deck/ics55_tt.spice (flattened, .LIB tt)",
+        "simulator": "Xyce 7.10.0",
+        "geometry_um": {
+          "wn": 1.0,
+          "wp": 4.0,
+          "l": 0.06
+        },
+        "vdd": 1.2,
+        "offset_uv": 78.12,
+        "delay_ns": 0.3273,
+        "delay_probe": {
+          "delay_ns": 0.3273313628219759,
+          "delay_out50_ns": 0.11014197917406897,
+          "t_clk_ns": 1.0499999999999998,
+          "t_diff50_ns": 1.3773313628219759,
+          "vdiff_v": 0.01
+        },
+        "method": "systematic offset by bisection over +-40 mV (9 iterations); delay = clk 50 % to the |outp-outn| = VDD/2 split at a 10 mV differential (delay_probe.delay_out50_ns is the single-ended diagnostic)",
+        "note": "offset is systematic only -- every device is nominal, so this is the topology/sizing offset, not a distribution. sigma_uv still needs the vendor agauss mismatch hooks; Xyce 7.10 .noise returns zeros, so no noise number.",
+        "sigma_source": "assumption"
+      }
     },
     "double_tail": {
       "sigma_uv": 700.0,
@@ -114,12 +312,12 @@
   "sim": {
     "ngspice_deck": "/grid/icsprout55-pdk/libs.tech/spice/foundry/ngspice/ICsprout_55LLULP1225_V1p1_hsp.lib",
     "xyce_deck": "/grid/saradc_auto/gen/outputs/deck/ics55_tt.spice",
-    "xyce_recipe": "python3 gen/analog/deck.py --ics55-xyce --out gen/outputs/deck/ics55_tt.spice --devices nm1p2_svt_lp pm1p2_svt_lp --w-um 1 --l-um 0.06",
+    "xyce_recipe": "python3 gen/analog/deck.py --ics55-xyce --out gen/outputs/deck/ics55_tt.spice --devices nm1p2_hvt_lp pm1p2_hvt_lp nm1p2_svt_lp pm1p2_svt_lp --w-um 1 --l-um 0.06",
     "xyce_verified": {
       "simulator": "Xyce 7.10.0",
       "model": "BSIM4 level 54. hvt bins nm1p2_hvt_lp_core.6 / pm1p2_hvt_lp_core.7 (L 54..72 nm, W 0.9..9.09 um); svt/lvt are single interpolated cards resolved numerically at the requested W/L.",
-      "measurement": "W=1 um, L=60 nm, |Vd|=|Vg|=1.2 V: hvt nmos 393 uA / pmos 203 uA; svt nmos 559 uA / pmos 309 uA.",
-      "note": "generated from model_wrapper1_hsp.lib .LIB tt + mos/*.mdl. One bin per binned device; d*_<device> deltas and <device>_*_retgt hooks are 0 in tt; sigma_mis_a..d and prelayout are declared global. The svt/lvt cards use HSpice select6/selectp7/evalbin macros that Xyce cannot expand, so gen/analog/hspice_expr.py evaluates them: those cards are geometry-locked to the (W, L) the deck was built with. Xyce warns the card declares BSIM4 4.5 and uses its oldest supported version (4.6.1)."
+      "measurement": "W=1 um, L=60 nm, |Vd|=|Vg|=1.2 V: hvt nmos 393 uA / pmos 203 uA; svt nmos 559 uA / pmos 309 uA. Analog leaves measured at the same size with gen/analog/measure_xyce.py (moscap C(V), TG Ron/Coff, comparator delay).",
+      "note": "generated from model_wrapper1_hsp.lib .LIB tt + mos/*.mdl. One bin per binned device; d*_<device> deltas and <device>_*_retgt hooks are 0 in tt; sigma_mis_a..d and prelayout are declared global. The svt/lvt cards use HSpice select6/selectp7/evalbin macros that Xyce cannot expand, so gen/analog/hspice_expr.py evaluates them: those cards are geometry-locked to the (W, L) the deck was built with. Xyce warns the card declares BSIM4 4.5 and uses its oldest supported version (4.6.1). The mismatch hooks (d*_<dev>_mis / _mismatch) are baked to zero so the deck is nominal-only; no statistical run is possible from it."
     },
     "osdi_required": false,
     "license_note": "vendor model data, educational/research evaluation only; not released PDK collateral and not usable for signoff or production"
@@ -133,17 +331,22 @@
   "digital_ceiling_source": "adpll_gen pdk_profiles.json ics55 signoff_mhz (PEX-cap + sparse L3; no PVT/jitter signoff)",
   "maturity": "LibreLane config and magic tech present; 1.4um rows; vendor models are evaluation-only",
   "qualified": false,
-  "default_cap": "mom",
+  "default_cap": "moscap",
   "analog": {
     "status": "scaffold",
     "style": "subckt",
     "finger_param": "nf",
     "sizing_um": {
-      "wn": 0.1,
-      "wp": 0.2,
+      "wn": 1.0,
+      "wp": 1.0,
       "l": 0.06
     },
-    "cap_backend": "mom",
-    "notes": "device names verified against model_wrapper1_hsp.lib (nm1p2_hvt_lp / pm1p2_hvt_lp wrappers, nf finger param), but the deck is HSpice-only ('for hspice only' in readme.txt) and evaluation-licensed, and the wrappers .INC HSpice .mdl files. ngspice cannot run it, so generation stays fail-closed."
+    "cap_backend": "moscap",
+    "notes": "device names verified against model_wrapper1_hsp.lib, and deck.py --ics55-xyce flattens the tt corner into a bare-model deck that Xyce 7.10 runs. The vendor subckt form still cannot run in Xyce (HSpice select6/selectp7/evalbin macros), so macro_gen's subckt output remains fail-closed: generation stays 'scaffold'. Metrics measured with measure_xyce.py at the drawn leaf geometry (W=1 um, L=60 nm): moscap density, TG Ron/Coff, comparator delay. A_C and comparator sigma_uv are still assumptions (vendor statistical hooks are agauss-only; Xyce .noise returns zeros).",
+    "switch_sizing_um": {
+      "wn": 1.0,
+      "wp": 1.0,
+      "l": 0.06
+    }
   }
 }
