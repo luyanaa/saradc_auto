@@ -160,9 +160,21 @@ def ics55(root: Path, out: Path) -> dict:
                "--target-netlist", str(out / "extracted.cir")], cwd=out)
     log = lvs.stdout + lvs.stderr
     (out / "lvs.log").write_text(log)
-    pex = magic_pex(gds, cell, root,
-                    root / "libs.tech/magic/ics55.magicrc", out)
+    pex = magic_pex(gds, cell, root, ics55_rc(root), out)
     return {"drc": items, "lvs_match": "LVS_COMPARE=PASS" in log, "pex": pex}
+
+
+def ics55_rc(root: Path) -> Path:
+    """ics55 magicrc.
+
+    The PDK tech file leaves every contact/via unbridged in extraction, so a
+    cross-plane route extracts as an open circuit (the shipped inverter
+    fragmented into 13 single-layer nets).  gen/analog/ics55_magic_fix.tech
+    is a local override of the `connect`/`contact`/`types` sections; see its
+    header.  Use it when present, fall back to the PDK tech otherwise.
+    """
+    fixed = HERE / "ics55_magic_fix.magicrc"
+    return fixed if fixed.is_file() else root / "libs.tech/magic/ics55.magicrc"
 
 
 def cdl_block(path: Path, cell: str, x_style: bool = False) -> str:
