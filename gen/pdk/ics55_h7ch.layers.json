@@ -20,8 +20,8 @@
   "momcap": {
     "unit_ff": 2.0,
     "layers": ["M1", "M2"],
-    "finger_width_um": 0.09,
-    "finger_gap_um": 0.09,
-    "note": "55nm tighter metal pitch allows narrower fringe fingers"
+    "finger_width_um": 0.10,
+    "finger_gap_um": 0.10,
+    "note": "real ics55 H7CH DRC: m1_width/space=0.09, m2_width/space=0.10.  Fingers on both layers use the widest limit (0.10) so the comb is clean on M1 and M2."
   }
 }

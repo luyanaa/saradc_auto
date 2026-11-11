@@ -91,6 +91,9 @@ MODELS = {
     "gf180": [
         dict(design="cap_unit", script="layout_gf180_cap.py",
              gds="cap_unit.gds", top="gf_cap_unit"),
+        dict(design="cap_mom", script="layout_mom_cap.py",
+             gds="cap_mom.gds", top="SARADC_CAP_MOM", passive=True, pex="skip",
+             env={"pdk": "gf180mcu_fd_7t5v0"}),
         dict(design="switch_tg", script="layout_gf180_tg.py",
              gds="switch_tg.gds", top="gf_switch_tg"),
         dict(design="array4b", script="layout_gf180_array.py",
@@ -99,6 +102,9 @@ MODELS = {
     "ics55": [
         dict(design="cap_unit", script="layout_ics55_cap.py",
              gds="cap_unit.gds", top="cap_unit"),
+        dict(design="cap_mom", script="layout_mom_cap.py",
+             gds="cap_mom.gds", top="SARADC_CAP_MOM", passive=True, pex="skip",
+             env={"pdk": "ics55_h7ch"}),
         dict(design="switch_tg", script="layout_ics55_tg.py",
              gds="switch_tg.gds", top="switch_tg"),
         dict(design="array4b", script="layout_ics55_array.py",
