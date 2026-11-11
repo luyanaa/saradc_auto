@@ -34,8 +34,10 @@ module sar_logic_wreset #(
     else case (state) // choose next state in state machine
       sWait : begin
         if(GO) state <= sSAMPLE;
-        RESULTP <= 'd0; // clear RESULT
-        RESULTN <= 'd0; // clear RESULT
+        // hold the previous RESULT here: it stays readable until sSAMPLE of
+        // the next conversion resets it, so a downstream clock domain or an
+        // asynchronous reader has the whole inter-conversion gap to capture
+        // it.  (Clearing in sWait collapsed the result to a 1-cycle pulse.)
       end
       sSAMPLE : begin // start new conversion so
         state <= sConv; // enter convert state next
@@ -58,8 +60,10 @@ module sar_logic_wreset #(
           state <= sDone;
       end
       sDone : begin
-        RESULTP <= 'd0; // clear RESULT
-        RESULTN <= 'd0; // clear RESULT
+        // hold the result: do NOT clear the registers here.  Clearing on the
+        // first sDone edge used to collapse the result to a single-cycle
+        // pulse, which no downstream clock domain can capture reliably.
+        // sSAMPLE (a fresh conversion) is what clears them.
         if(GO) state <= sSAMPLE;
         else state <= sWait;
       end
