@@ -1,0 +1,62 @@
+# LEF/DEF layer map for KLayout stream-out and LVS on the ICS55 process.
+#
+# The PDK ships `libs.tech/klayout/tech/ics55.map`, but that file is a *GDS
+# import* map: its third column holds GDS names (M1, V1, TM2) while every ICS55
+# LEF names the same layers MET1, VIA1, T4M2.  KLayout therefore matches
+# nothing, prints
+#
+#   Warning: No mapping for layer 'MET1', purpose 'NET' - layer is ignored
+#
+# and the streamed GDS contains only standard-cell geometry: no routing, no
+# pin labels.  Downstream that shows up as a KLayout DRC on cell internals and
+# as LVS with `direct_texts=0 ports=0`.  This file is the LEF/DEF map the step
+# actually expects, in the format used by the other PDKs
+# (<LEF layer> <purposes> <GDS layer> <GDS datatype>).
+#
+# Layer numbers follow the PDK's own GDS map; the NAME lines put each pin
+# label on the `*LBL` datatype, which is where `libs.tech/lvs/ics55.lvs`
+# reads top-level ports from (81/6, 82/6, ..., 103/6).
+
+# --- FEOL ------------------------------------------------------------------
+ACT              NET,PIN,LEFPIN                    2   1
+POLY             NET,PIN,LEFPIN                   41   1
+CT               NET,PIN                          72   1
+
+# --- routing ---------------------------------------------------------------
+MET1             NET,SPNET,PIN,LEFPIN,VIA         81   1
+MET2             NET,SPNET,PIN,LEFPIN,VIA         82   1
+MET3             NET,SPNET,PIN,LEFPIN,VIA         83   1
+MET4             NET,SPNET,PIN,LEFPIN,VIA         84   1
+MET5             NET,SPNET,PIN,LEFPIN,VIA         85   1
+T4M1             NET,SPNET,PIN,LEFPIN,VIA        102   1
+T4M2             NET,SPNET,PIN,LEFPIN,VIA        103   1
+RV               NET,PIN                         120   1
+RDL              NET,PIN                         123   1
+ALPAD            NET,PIN                         122   1
+COVER            NET,PIN                         124   1
+
+# --- cuts ------------------------------------------------------------------
+VIA1             PIN,LEFPIN,VIA                   91   1
+VIA2             PIN,LEFPIN,VIA                   92   1
+VIA3             PIN,LEFPIN,VIA                   93   1
+VIA4             PIN,LEFPIN,VIA                   94   1
+T4V1             PIN,LEFPIN,VIA                  112   1
+T4V2             PIN,LEFPIN,VIA                  113   1
+
+# --- obstructions ----------------------------------------------------------
+MET1             LEFOBS                          81   1
+MET2             LEFOBS                          82   1
+MET3             LEFOBS                          83   1
+MET4             LEFOBS                          84   1
+MET5             LEFOBS                          85   1
+
+# --- pin labels (what the LVS runset reads as ports) -----------------------
+NAME MET1/PIN    81   6
+NAME MET2/PIN    82   6
+NAME MET3/PIN    83   6
+NAME MET4/PIN    84   6
+NAME MET5/PIN    85   6
+NAME T4M1/PIN   102   6
+NAME T4M2/PIN   103   6
+NAME RDL/PIN    123   6
+NAME ALPAD/PIN  122   6

@@ -655,3 +655,51 @@ The earlier ring-free TG variant (`build_tg_noring`, m1-only link bars) is
 deleted: it shorted Z1=Z2=VDD=B_i=REF_i and only existed because the tech
 defect made the m2 hop look impossible.  Row pitch 5.20, cap pitch 7.15,
 TG gap 1.50, stagger 0.80 decreasing.
+
+## Four-PDK electrical characterization -- DONE
+
+`gen/analog/char_all.py` (`make -C gen char-all`) runs the same three benches
+on sky130 / ihp / gf180 / ics55 against each PDK's own models, at the geometry
+actually drawn in the layout leaves:
+
+| PDK | deck recipe | simulator |
+|---|---|---|
+| sky130 | flattened `gen/outputs/deck/sky130_tt.spice` (`deck.py`) | ngspice |
+| ihp | `.lib cornerMOSlv.lib mos_tt` + OSDI psp103 loaded from a generated `.spiceinit` | ngspice |
+| gf180 | `.include design.spice` + `.lib sm141064.spice typical` | ngspice |
+| ics55 | flattened `gen/outputs/deck/ics55_tt.spice` (`deck.py --ics55-xyce`) | Xyce 7.10 |
+
+Measured (2026-11-09, nominal TT, 27 C; full curves in
+`gen/outputs/char/characters.json`):
+
+| PDK | cap Ctyp (fF) | cap flatband (fF) | density (fF/um^2) | TG Ron max (ohm) | TG Coff (fF) | cmp offset (uV) | cmp delay (ns) |
+|---|---|---|---|---|---|---|---|
+| sky130 | 3.767 | 2.673 | 5.98 | 1783 | 4.633 | -78.1 | 0.109 |
+| ihp | 0.421 | 0.348 | 10.79 | 27431 | 0.385 | -78.1 | 0.159 |
+| gf180 | 3.942 | 2.993 | 2.05 | 12363 | 1.667 | +78.1 | 0.466 |
+| ics55 | 1.635 | 1.327 | 11.06 | 74591 | 1.654 | +78.1 | 0.327 |
+
+Comparator offsets land on the `+/-78 uV` bisection floor (span +/-40 mV,
+9 iterations), i.e. the systematic offset is below the probe resolution; it is
+reported with that caveat, not as a physical 78 uV.  Mismatch / Pelgrom is not
+reported: none of the decks exposes a working Monte-Carlo scatter in this
+tree.  The ihp Ron is the minimum-size leaf (W=0.15/0.3 um) -- widen the TG
+for a real sampling switch, as sky130 does (5.6/11.2 um gives 1.8 kohm).
+
+The AC `.noise` path returns an empty/zero spectrum on ihp/gf180 here, so
+`sigma_uv` is set to null rather than quoting 0 V.  These benches are
+model-level; the layout/PEX side is covered by `CLOSURE.md`.
+
+PEX per-bit capacitance from the closed `array4b` netlists (fF; the ihp
+numbers cross-check `pdk_flow/ihp/array/README_NOTES.txt` exactly):
+
+| PDK | B0 | B1 | B2 | B3 | VSH | REF0..3 (each) |
+|---|---|---|---|---|---|---|
+| ihp | 1.618 | 2.307 | 3.847 | 7.046 | 13.148 | 0.447 |
+| gf180 | 2.740 | 3.800 | 6.185 | 11.029 | 21.917 | 0.642 |
+| ics55 | 2.071 | 3.135 | 5.154 | 9.510 | n/a* | 0.719 |
+
+The gf180 numbers moved from the old (open) netlist because the TG now loads
+`B_i`; the old floating `gf_switch_tg_*.Z2` nets are gone.  `*` ics55 leaves
+the cap gate bus unnamed in PEX (per-instance gate nodes), so only the named
+`B*`/`REF*` nets are summed.

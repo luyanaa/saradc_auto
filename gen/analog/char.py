@@ -23,6 +23,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,10 @@ def run(netlist, workdir, timeout=600):
     path = os.path.join(workdir, "char.sp")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(netlist)
+    init = os.environ.get("ADC_SPICEINIT")
+    if init:
+        shutil.copyfile(os.path.expanduser(init),
+                        os.path.join(workdir, ".spiceinit"))
     proc = subprocess.run(["ngspice", "-b", path], cwd=workdir,
                           capture_output=True, text=True, timeout=timeout)
     return proc.returncode, proc.stdout + proc.stderr
@@ -355,8 +360,10 @@ def comparator(profile, deck_path, params=None, vdd=None, span_mv=40.0,
     deck_path = os.path.abspath(os.path.expanduser(deck_path))
     dev = macro_gen.device_binding(profile)
     size = profile.get("analog", {}).get("sizing_um") or {}
-    params = {"wn": size.get("wn", 1.0), "wp": size.get("wp", 2.0),
-              "l": size.get("l", 0.15)}
+    base = {"wn": size.get("wn", 1.0), "wp": size.get("wp", 2.0),
+            "l": size.get("l", 0.15)}
+    base.update(params or {})
+    params = base
     vdd = vdd if vdd is not None else profile["vdd"]
     circuit = leaf(dev, "cmp_strongarm", params)
 

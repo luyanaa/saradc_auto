@@ -7,7 +7,7 @@
   "required": ["design", "arch", "pdk", "scl", "resolution", "vdd", "fs_hz", "input"],
   "properties": {
     "design": { "type": "string", "minLength": 1 },
-    "arch": { "enum": ["sar", "ramp", "sdm", "vco"] },
+    "arch": { "enum": ["sar", "ramp", "sdm", "vco", "dual_slope", "flash", "pipeline", "ti"] },
     "pdk": { "type": "string", "minLength": 1 },
     "scl": { "type": "string", "minLength": 1 },
     "resolution": { "type": "integer", "minimum": 4, "maximum": 16 },
@@ -99,8 +99,71 @@
       "description": "Delta-sigma loop overrides; the profile's sdm block is the default.",
       "properties": {
         "order": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "quantizer_bits": { "type": "integer", "minimum": 1, "maximum": 4, "default": 1 },
         "integrator_gain_db": { "type": "number", "minimum": 0 },
-        "osr_sweep": { "type": "array", "items": { "type": "integer", "minimum": 2 } }
+        "feedback_beta": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.5 },
+        "loading_db": { "type": "number", "minimum": 0 },
+        "thermal_margin_db": { "type": "number", "minimum": 0, "default": 10.0 },
+        "thermal_noise_lsb": { "type": "number", "minimum": 0 },
+        "osr_sweep": { "type": "array", "items": { "type": "integer", "minimum": 2 } },
+        "decimator": {
+          "type": "object",
+          "description": "CIC + halfband decimator used by the report and the behavioural model.",
+          "properties": {
+            "cic_order": { "type": "integer", "minimum": 1, "maximum": 8, "default": 4 },
+            "cic_r1": { "type": "integer", "minimum": 1, "default": 4 },
+            "guard_band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.9 },
+            "source": { "type": "string" }
+          }
+        }
+      }
+    },
+    "dual_slope": {
+      "type": "object",
+      "description": "Integrating dual-slope overrides; the profile's dual_slope block is the default.",
+      "properties": {
+        "variant": { "enum": ["one_resistor", "two_resistor"], "default": "one_resistor" },
+        "phases": { "type": "integer", "minimum": 2, "maximum": 2, "default": 2 },
+        "auto_zero": { "type": "boolean", "default": true },
+        "vref": { "type": "number", "exclusiveMinimum": 0 },
+        "v_int_max": { "type": "number", "exclusiveMinimum": 0 },
+        "overhead_clocks": { "type": "integer", "minimum": 0, "default": 4 },
+        "c_integ_pf": { "type": "number", "exclusiveMinimum": 0, "default": 100.0 }
+      }
+    },
+    "flash": {
+      "type": "object",
+      "description": "Flash ladder/encoder overrides; the profile's flash block is the default.",
+      "properties": {
+        "encoder": { "enum": ["popcount", "priority"], "default": "popcount" },
+        "interpolate": { "enum": [1, 2, 4], "default": 1 },
+        "preamps": { "type": "boolean", "default": false },
+        "ru_ohm": { "type": "number", "exclusiveMinimum": 0 },
+        "ru": { "type": "string" }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "Pipeline stage/calibration overrides.",
+      "properties": {
+        "bits_per_stage": { "enum": [1.5, 2.5, 3.5], "default": 1.5 },
+        "stages": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "const": "auto" }], "default": "auto" },
+        "redundancy_bits": { "type": "integer", "minimum": 0, "default": 1 },
+        "cal_residual_lsb": { "type": "number", "exclusiveMinimum": 0, "default": 0.5 },
+        "cu_ff": { "oneOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "const": "auto" }], "default": "auto" }
+      }
+    },
+    "ti": {
+      "type": "object",
+      "description": "Time-interleaved wrapper; the sub-ADC is chosen by sub_arch.",
+      "properties": {
+        "channels": { "type": "integer", "minimum": 2, "maximum": 16, "default": 2 },
+        "sub_arch": { "enum": ["sar", "flash", "pipeline", "sdm"], "default": "sar" },
+        "skew_fs_rms": { "type": "number", "minimum": 0 },
+        "offset_mismatch_uv": { "type": "number", "minimum": 0 },
+        "gain_mismatch_pct": { "type": "number", "minimum": 0 },
+        "offset_residual_uv": { "type": "number", "minimum": 0 },
+        "gain_residual_pct": { "type": "number", "minimum": 0 }
       }
     },
     "vco": {

@@ -66,17 +66,26 @@
     "strongarm": {
       "sigma_uv": 800.0,
       "delay_ns": 0.4,
-      "source": "assumption"
+      "source": "assumption",
+      "input_cap_ff": 3.5,
+      "area_um2": 0.3,
+      "input_cap_source": "assumption"
     },
     "double_tail": {
       "sigma_uv": 500.0,
       "delay_ns": 0.6,
-      "source": "assumption"
+      "source": "assumption",
+      "input_cap_ff": 4.5,
+      "area_um2": 0.5,
+      "input_cap_source": "assumption"
     },
     "preamp_latch": {
       "sigma_uv": 120.0,
       "delay_ns": 1.2,
-      "source": "assumption"
+      "source": "assumption",
+      "input_cap_ff": 5.5,
+      "area_um2": 0.8,
+      "input_cap_source": "assumption"
     }
   },
   "ramp": {
@@ -142,5 +151,56 @@
     },
     "cap_backend": "moscap",
     "notes": "sg13_lv_nmos/pmos with ng finger param; device-level closure recorded in OpenSERDES docs/ihp_device_closure.md"
+  },
+  "opamp": {
+    "gain_db": 60.0,
+    "gbw_mhz": 200.0,
+    "noise_uv_rms": 100.0,
+    "swing_v": 0.96,
+    "source": "assumption",
+    "notes": "shared OTA block (E2). gain/GBW are placeholders; the OTA leaf does not exist in this repo."
+  },
+  "flash": {
+    "encoder_delay_ns": 0.2,
+    "ladder_unit_area_um2": 11.4,
+    "max_area_scale": 8.0,
+    "sigma_is_random": false,
+    "source": "assumption",
+    "notes": "ladder unit area is the dac-generator poly unit; encoder delay is a placeholder. sigma_is_random is false because no profile has a measured random comparator offset distribution."
+  },
+  "resistors": [
+    {
+      "name": "poly_unit",
+      "rsh_ohm_sq": 350,
+      "unit_w_um": 2.0,
+      "unit_l_um": 5.714,
+      "ru_ohm": 1000,
+      "ac_pct_um": 0.5,
+      "source": "assumption",
+      "notes": "dac-generator/analog/string unit; no sign-off resistor layout, Pelgrom and voltage coefficient are placeholders."
+    }
+  ],
+  "dual_slope": {
+    "opamp_gain_db": 80.0,
+    "opamp_offset_uv": 100.0,
+    "comparator_delay_ns": 0.4,
+    "dielectric_absorption_pct": 0.02,
+    "ib_na": 1.0,
+    "r_max_ohm": 2500000.0,
+    "max_cap_area_um2": 2.0,
+    "resistor_match_pct": 0.1,
+    "delay_variation_ns": 0.0,
+    "source": "assumption",
+    "notes": "A0 and offset are OTA placeholders; dielectric absorption is unmeasured on every PDK and is the decisive 12 b number."
+  },
+  "ti": {
+    "offset_mismatch_uv": 800.0,
+    "gain_mismatch_pct": 0.05,
+    "skew_fs_rms": 1000.0,
+    "offset_residual_uv": 80.0,
+    "gain_residual_pct": 0.005,
+    "multiphase_clock": false,
+    "source": "assumption",
+    "notes": "offset inherits the comparator sigma; there is no N-phase clock and no measured layout skew."
   }
 }

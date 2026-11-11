@@ -42,6 +42,9 @@ IHP_ROOT = os.environ.get("IHP_ROOT") or glob.glob(
 M1, M1T = (8, 0), (8, 2)
 V1 = (19, 0)
 M2, M2T = (10, 0), (10, 2)
+PIN_M1 = (8, 25)    # top-level pin purpose 25 on metal1 (REF/VDD nets)
+PIN_M2 = (10, 25)   # ... and on metal2 (B*/VSH nets); the text must sit on
+                    # the net's own metal or the deck cannot associate it
 
 NBITS = 4
 CAP_PITCH = 2.76     # exactly the cell width: the pmos nwells touch
@@ -80,6 +83,11 @@ def label(cell, layer, value, x, y):
         pya.Vector(int(round(x * 1000)), int(round(y * 1000))))))
 
 
+def pin(cell, value, x, y, layer=None):
+    """A top-level pin on purpose 25 of the net's metal so LVS resolves it."""
+    label(cell, cell.layout().layer(*(layer or PIN_M1)), value, x, y)
+
+
 def strip(cell, layer, names):
     for s in list(cell.shapes(layer).each()):
         if s.is_text() and s.text.string in names:
@@ -97,6 +105,11 @@ def main() -> None:
     tg = load_leaf(ly, tg_gds)
     strip(cap, ly.layer(*M1T), {"FL"})
     strip(tg, ly.layer(*M1T), {"Z1", "Z2"})
+    # The TG leaf carries all of its labels on the 8/25 pin purpose, so they
+    # would surface as top-level ports of the array (S/SB/VDD/VSS/Z1/Z2).  The
+    # array exposes B*/REF*/VSH/VDD instead; drop the leaf pins so the deck
+    # resolves the intended ports.
+    strip(tg, ly.layer(*PIN_M1), {"S", "SB", "VDD", "VSS", "Z1", "Z2"})
 
     top = ly.create_cell("SARADC_ARRAY_IHP_4B")
     m1, m1t = ly.layer(*M1), ly.layer(*M1T)
@@ -138,6 +151,8 @@ def main() -> None:
             3.18, 0, dy)
         label(top, m2t, f"B{bit}", 0.0, dy + 0.15)
         label(top, m1t, f"REF{bit}", tg_x + Z1X[1] - 0.05, dy + 3.05)
+        pin(top, f"B{bit}", 0.2, dy + 0.15, PIN_M2)
+        pin(top, f"REF{bit}", tg_x + Z1X[1] - 0.05, dy + 3.05, PIN_M1)
 
     # VSH met2 bus down the left edge + a drop onto each cap gate pad
     vx0, vx1 = -0.85, -0.65
@@ -149,6 +164,7 @@ def main() -> None:
             box(top, m2, vx0, 0.55, cx + VSHX[1], 0.95, 0, dy)
             box(top, m2, cx + VSHX[0], 0.55, cx + VSHX[1], 1.20, 0, dy)
     label(top, m2t, "VSH", (vx0 + vx1) / 2, -0.25)
+    pin(top, "VSH", (vx0 + vx1) / 2, -0.25, PIN_M2)
 
     # VDD: each row has an m2 band at y3.16-3.37 (above the highest m2
     # crown pad at 2.95), joined by m2 risers onto every cap's VNW m2
@@ -176,6 +192,7 @@ def main() -> None:
     box(top, m1, spine_x[0], 3.16, spine_x[1],
         (NBITS - 1) * ROW_PITCH + 3.37)
     label(top, m1t, "VDD", (spine_x[0] + spine_x[1]) / 2, 3.26)
+    pin(top, "VDD", (spine_x[0] + spine_x[1]) / 2, 3.26)
 
     ly.write(OUT)
     print(f"wrote {OUT}  cell={top.name}  bbox={top.bbox().to_s()}")

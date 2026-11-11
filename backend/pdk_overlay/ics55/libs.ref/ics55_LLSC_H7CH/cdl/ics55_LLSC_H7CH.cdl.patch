@@ -1,0 +1,135 @@
+--- a/ics55_LLSC_H7CH.cdl
++++ b/ics55_LLSC_H7CH.cdl
+@@ -3182,10 +3182,10 @@
+ 
+ .SUBCKT AOI22X1H7H A0 A1 B0 B1 VDD VSS Y
+ *.PININFO A0:I A1:I B0:I B1:I Y:O VDD:B VSS:B
+-MMN5 net14 B1 VSS VSS nm1p2_hvt_lp W=210n L=60n m=1
++MMN5 net14 B0 VSS VSS nm1p2_hvt_lp W=210n L=60n m=1
+ MMN4 net13 A0 VSS VSS nm1p2_hvt_lp W=210n L=60n m=1
+ MMN1 Y A1 net13 VSS nm1p2_hvt_lp W=210n L=60n m=1
+-MMN0 Y B0 net14 VSS nm1p2_hvt_lp W=210n L=60n m=1
++MMN0 Y B1 net14 VSS nm1p2_hvt_lp W=210n L=60n m=1
+ MMP3 Y B1 net8 VDD pm1p2_hvt_lp W=270n L=60n m=1
+ MMP2 Y B0 net8 VDD pm1p2_hvt_lp W=270n L=60n m=1
+ MMP1 net8 A1 VDD VDD pm1p2_hvt_lp W=270n L=60n m=1
+@@ -3218,14 +3218,18 @@
+ 
+ .SUBCKT AOI22X2H7H A0 A1 B0 B1 VDD VSS Y
+ *.PININFO A0:I A1:I B0:I B1:I Y:O VDD:B VSS:B
+-MMP2 Y B0 net31 VDD pm1p2_hvt_lp W=380n L=60n m=1
+-MMP3 Y B1 net31 VDD pm1p2_hvt_lp W=380n L=60n m=1
+-MMP1 net31 A1 VDD VDD pm1p2_hvt_lp W=380n L=60n m=1
+-MMP0 net31 A0 VDD VDD pm1p2_hvt_lp W=380n L=60n m=1
+-MMN0 Y B0 net27 VSS nm1p2_hvt_lp W=300n L=60n m=1
+-MMN1 Y A1 net28 VSS nm1p2_hvt_lp W=300n L=60n m=1
+-MMN4 net28 A0 VSS VSS nm1p2_hvt_lp W=300n L=60n m=1
+-MMN5 net27 B1 VSS VSS nm1p2_hvt_lp W=300n L=60n m=1
++MMP2 Y A0 net31 VDD pm1p2_hvt_lp W=380n L=60n m=1
++MMP3 Y A1 net31 VDD pm1p2_hvt_lp W=380n L=60n m=1
++MMP1 net31 B1 VDD VDD pm1p2_hvt_lp W=380n L=60n m=1
++MMP0 net31 B0 VDD VDD pm1p2_hvt_lp W=380n L=60n m=1
++MMN0 Y B1 net27 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN1 Y A0 net28 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN4 net28 A1 VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN5 net27 B0 VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN6 Y B1 net29 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN7 net29 B0 VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN8 Y A0 net30 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN9 net30 A1 VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
+ .ENDS
+ 
+ ************************************************************************
+@@ -11585,10 +11589,10 @@
+ 
+ .SUBCKT NAND2X0P5H7H A B VDD VSS Y
+ *.PININFO A:I B:I Y:O VDD:B VSS:B
+-MMN0 Y B net6 VSS nm1p2_hvt_lp W=150n L=60n m=1
+-MMN1 net6 A VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
+-MMP1 Y B VDD VDD pm1p2_hvt_lp W=190n L=60n m=1
+-MMP0 Y A VDD VDD pm1p2_hvt_lp W=190n L=60n m=1
++MMN0 Y A net6 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMN1 net6 B VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMP1 Y A VDD VDD pm1p2_hvt_lp W=190n L=60n m=1
++MMP0 Y B VDD VDD pm1p2_hvt_lp W=190n L=60n m=1
+ .ENDS
+ 
+ ************************************************************************
+@@ -11613,10 +11617,10 @@
+ 
+ .SUBCKT NAND2X12H7H A B VDD VSS Y
+ *.PININFO A:I B:I Y:O VDD:B VSS:B
+-MMM3 Y B net12 VSS nm1p2_hvt_lp W=1.8u L=60n m=1
+-MMM2 net12 A VSS VSS nm1p2_hvt_lp W=1.8u L=60n m=1
+-MMM1 Y B VDD VDD pm1p2_hvt_lp W=2.28u L=60n m=1
+-MMM0 Y A VDD VDD pm1p2_hvt_lp W=2.28u L=60n m=1
++MMM3 Y A net12 VSS nm1p2_hvt_lp W=1.8u L=60n m=1
++MMM2 net12 B VSS VSS nm1p2_hvt_lp W=1.8u L=60n m=1
++MMM1 Y A VDD VDD pm1p2_hvt_lp W=2.28u L=60n m=1
++MMM0 Y B VDD VDD pm1p2_hvt_lp W=2.28u L=60n m=1
+ .ENDS
+ 
+ ************************************************************************
+@@ -11627,10 +11631,10 @@
+ 
+ .SUBCKT NAND2X16H7H A B VDD VSS Y
+ *.PININFO A:I B:I Y:O VDD:B VSS:B
+-MMM1 Y B VDD VDD pm1p2_hvt_lp W=3.04u L=60n m=1
+-MMM0 Y A VDD VDD pm1p2_hvt_lp W=3.04u L=60n m=1
+-MMM3 Y B net12 VSS nm1p2_hvt_lp W=2.4u L=60n m=1
+-MMM2 net12 A VSS VSS nm1p2_hvt_lp W=2.4u L=60n m=1
++MMM1 Y A VDD VDD pm1p2_hvt_lp W=3.04u L=60n m=1
++MMM0 Y B VDD VDD pm1p2_hvt_lp W=3.04u L=60n m=1
++MMM3 Y A net12 VSS nm1p2_hvt_lp W=2.4u L=60n m=1
++MMM2 net12 B VSS VSS nm1p2_hvt_lp W=2.4u L=60n m=1
+ .ENDS
+ 
+ ************************************************************************
+@@ -11711,10 +11715,10 @@
+ 
+ .SUBCKT NAND2X6H7H A B VDD VSS Y
+ *.PININFO A:I B:I Y:O VDD:B VSS:B
+-MMM3 Y B net12 VSS nm1p2_hvt_lp W=900n L=60n m=1
+-MMM2 net12 A VSS VSS nm1p2_hvt_lp W=900n L=60n m=1
+-MMM1 Y B VDD VDD pm1p2_hvt_lp W=1.14u L=60n m=1
+-MMM0 Y A VDD VDD pm1p2_hvt_lp W=1.14u L=60n m=1
++MMM3 Y A net12 VSS nm1p2_hvt_lp W=900n L=60n m=1
++MMM2 net12 B VSS VSS nm1p2_hvt_lp W=900n L=60n m=1
++MMM1 Y A VDD VDD pm1p2_hvt_lp W=1.14u L=60n m=1
++MMM0 Y B VDD VDD pm1p2_hvt_lp W=1.14u L=60n m=1
+ .ENDS
+ 
+ ************************************************************************
+@@ -11740,8 +11744,8 @@
+ .SUBCKT NAND3BBX0P5H7H AN BN C VDD VSS Y
+ *.PININFO AN:I BN:I C:I Y:O VDD:B VSS:B
+ MMM2 net25 A2N net33 VSS nm1p2_hvt_lp W=150n L=60n m=1
+-MMM3 Y A1N net25 VSS nm1p2_hvt_lp W=150n L=60n m=1
+-MMM7 net33 C VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMM3 Y C net25 VSS nm1p2_hvt_lp W=150n L=60n m=1
++MMM7 net33 A1N VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
+ MMM5 A2N BN VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
+ MMM8 A1N AN VSS VSS nm1p2_hvt_lp W=150n L=60n m=1
+ MMM1 Y C VDD VDD pm1p2_hvt_lp W=190n L=60n m=1
+@@ -16796,11 +16800,16 @@
+ MMNM2 net42 A2 VSS VSS nm1p2_hvt_lp W=450n L=60n m=1
+ MMNM1 net42 A1 VSS VSS nm1p2_hvt_lp W=450n L=60n m=1
+ MMNM0 net42 A0 VSS VSS nm1p2_hvt_lp W=450n L=60n m=1
+-MMPM4 Y B1 net21 VDD pm1p2_hvt_lp W=570n L=60n m=1
+-MMPM3 net21 B0 VDD VDD pm1p2_hvt_lp W=570n L=60n m=1
+-MMPM2 Y A2 net9 VDD pm1p2_hvt_lp W=570n L=60n m=1
+-MMPM1 net9 A1 net13 VDD pm1p2_hvt_lp W=570n L=60n m=1
+-MMPM0 net13 A0 VDD VDD pm1p2_hvt_lp W=570n L=60n m=1
++MMPM4 Y B1 net21 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM3 net21 B0 VDD VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM4B Y B1 net22 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM3B net22 B0 VDD VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM2 Y A2 net9 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM1 net9 A1 net13 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM0 net13 A0 VDD VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM2B Y A2 net10 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM1B net10 A1 net14 VDD pm1p2_hvt_lp W=285n L=60n m=1
++MMPM0B net14 A0 VDD VDD pm1p2_hvt_lp W=285n L=60n m=1
+ .ENDS
+ 
+ ************************************************************************

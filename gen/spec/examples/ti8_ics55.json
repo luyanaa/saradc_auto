@@ -1,0 +1,58 @@
+{
+  "design": "ti8_ics55",
+  "arch": "ti",
+  "pdk": "ics55_h7ch",
+  "scl": "ics55_LLSC_H7CH",
+  "resolution": 8,
+  "vdd": 1.2,
+  "fs_hz": 1000000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "differential",
+    "vfs": 1.2
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 0
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 1,
+    "averaging": 1
+  },
+  "ti": {
+    "channels": 2,
+    "sub_arch": "sar",
+    "skew_fs_rms": 1000,
+    "offset_mismatch_uv": 1200,
+    "gain_mismatch_pct": 0.05
+  },
+  "calibration": {
+    "offset": true,
+    "gain": true,
+    "weights": false
+  },
+  "physical": {
+    "array": "common_centroid",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex"
+    ]
+  }
+}

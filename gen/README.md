@@ -32,11 +32,21 @@ python3 gen/run.py behavioral --spec gen/spec/examples/sar8_sky130.json --sigma-
 python3 gen/run.py behavioral --spec gen/spec/examples/ramp8_sky130.json
 python3 gen/run.py behavioral --spec gen/spec/examples/sdm8_sky130.json --osr 64
 python3 gen/run.py behavioral --spec gen/spec/examples/vco8_ics55.json
+python3 gen/run.py behavioral --spec gen/spec/examples/dualslope8_ics55.json
+python3 gen/run.py behavioral --spec gen/spec/examples/flash8_sky130.json
+python3 gen/run.py behavioral --spec gen/spec/examples/pipeline8_sky130.json
+python3 gen/run.py behavioral --spec gen/spec/examples/ti8_ics55.json
 python3 gen/run.py report --out gen/outputs/matrix.md
 ```
 
-Four architectures are implemented (`sar`, `ramp`, `sdm`, `vco`); `run.py`
-dispatches on `spec["arch"]` for both feasibility and the behavioral model.
+Eight architectures are implemented (`sar`, `ramp`, `sdm`, `vco`,
+`dual_slope`, `flash`, `pipeline`, `ti`); `run.py` dispatches on
+`spec["arch"]` for both feasibility and the behavioral model.
+
+The gap register — every L1 gap closed, every L3 gap blocked on a named
+prerequisite, with the command that evidences it — is
+[`GAPS.md`](GAPS.md). The study that produced it is
+[`ARCH_STUDY.md`](ARCH_STUDY.md).
 
 ## What M0 actually computes
 
@@ -44,7 +54,7 @@ dispatches on `spec["arch"]` for both feasibility and the behavioral model.
 |---|---|---|
 | path check | `run.py check` | every liberty/LEF/deck the profiles reference exists |
 | feasibility | `feasibility.py` | per-arch sizing: unit/hold/sampling cap, area, kT/C, mismatch, comparator budget, tuning span, settling-limited fs |
-| behavioral | `verify/behavioral_{sar,ramp,sdm,vco}.py` | DNL/INL over a fine ramp and/or SNDR/ENOB over a coherent sine |
+| behavioral | `verify/behavioral_{sar,ramp,sdm,vco,dualslope,flash,pipeline,ti}.py` | DNL/INL over a fine ramp and/or SNDR/ENOB over a coherent sine (SDM adds a CIC⁴ decimator; TI adds the N-channel mux) |
 
 The feasibility equations are documented at the top of `feasibility.py` and in
 the block comment above each evaluator. The important ones:
@@ -96,9 +106,9 @@ FAIL_UNCHARACTERIZED        the requested cap class / arch block is absent
 `"source": "assumption"`. Replacing one of those with a measured number is a
 real deliverable, not a config edit.
 
-## The other three architectures
+## The other architectures
 
-All four dispatch from the same entry point (`feasibility.evaluate` and
+All eight dispatch from the same entry point (`feasibility.evaluate` and
 `run.py behavioral` on `spec["arch"]`) and share the PDK profile. They differ
 in what physically limits them, which is the point of having them.
 
@@ -224,7 +234,7 @@ resolves classes to devices.
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| M0 (done) | profiles + feasibility + behavioral models for all four architectures | 8-bit SAR passes, 10/12-bit fail on comparator noise as expected; ramp/sdm/vco close with assumptions flagged |
+| M0 (done) | profiles + feasibility + behavioral models for all eight architectures | 8-bit SAR passes, 10/12-bit fail on comparator noise as expected; ramp/sdm/vco and the four study architectures close with assumptions flagged; L3 leaves still blocked (see `GAPS.md`) |
 | M1 | portable sync SAR RTL + AMS co-sim | ENOB ≥ 7.5 against the transistor netlist |
 | M2 (started) | analog leaves + PDK-deck characterization | Cu, Ron, comparator offset/delay measured on sky130; LVS/DRC/PEX and noise still open |
 | M3 | full schematic loop + FFT | DNL < 0.5 LSB, ENOB ≥ 7.5 |

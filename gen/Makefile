@@ -5,12 +5,15 @@ PDK  ?= sky130A_hd
 OUT  ?= $(ROOT)/gen/outputs
 TRIALS ?= 20
 
-.PHONY: all check matrix feas behavioral deck deck-ics55 measure-ics55 measure char analog layout pdk-flow report clean
+.PHONY: all check validate matrix feas behavioral deck deck-ics55 measure-ics55 measure char char-all analog layout pdk-flow closure report clean
 
 all: check matrix report
 
 check:
 	cd $(ROOT) && $(PY) gen/run.py check
+
+validate:
+	cd $(ROOT) && $(PY) gen/run.py validate
 
 matrix:
 	cd $(ROOT) && $(PY) gen/run.py matrix --spec $(SPEC)
@@ -70,6 +73,13 @@ char: deck
 	cd $(ROOT) && $(PY) gen/analog/char.py --pdk $(PDK) --deck $(DECK) \
 		--json --out $(OUT)/char.json
 
+# Same three benches (unit MOSCAP, TG, StrongArm comparator) on all four PDKs,
+# at each PDK's drawn leaf geometry.  Builds the ihp OSDI and gf180 ngspice
+# decks itself; sky130/ics55 reuse the flattened decks above.
+char-all: deck deck-ics55
+	mkdir -p $(OUT)/char
+	cd $(ROOT) && $(PY) gen/analog/char_all.py --out $(OUT)/char
+
 analog:
 	cd $(ROOT) && $(PY) gen/run.py analog --pdk $(PDK) --out $(OUT)/analog --smoke
 
@@ -86,6 +96,13 @@ layout: deck
 	mkdir -p $(OUT)/layout
 	cd $(ROOT) && $(PY) gen/analog/layout_check.py --pdk $(PDK) \
 		--pdk-root $(SKY130_ROOT) --deck $(DECK) --out $(OUT)/layout
+
+# DRC/LVS/PEX closure for every layout model on every PDK.  Regenerates each
+# GDS from source, then runs the proof chain; emits $(OUT)/closure/closure.json.
+# sky130 is driven through layout_check.py, the other PDKs through closure.py.
+closure: deck
+	mkdir -p $(OUT)/closure
+	cd $(ROOT) && $(PY) gen/analog/closure.py --pdk all --out $(OUT)/closure
 
 report:
 	mkdir -p $(OUT)

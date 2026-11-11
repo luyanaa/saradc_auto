@@ -1,0 +1,63 @@
+{
+  "design": "sdm8_multibit_sky130",
+  "arch": "sdm",
+  "pdk": "sky130A_hd",
+  "scl": "sky130_fd_sc_hd",
+  "resolution": 8,
+  "vdd": 1.8,
+  "fs_hz": 10000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "differential",
+    "vfs": 1.8
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 0
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 32,
+    "averaging": 1
+  },
+  "sdm": {
+    "order": 2,
+    "quantizer_bits": 3,
+    "integrator_gain_db": 60.0,
+    "thermal_margin_db": 10.0,
+    "decimator": {
+      "cic_order": 5,
+      "cic_r1": 2,
+      "guard_band": 0.9,
+      "source": "assumption"
+    }
+  },
+  "calibration": {
+    "offset": false,
+    "gain": false,
+    "weights": false
+  },
+  "physical": {
+    "array": "row",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex"
+    ]
+  }
+}

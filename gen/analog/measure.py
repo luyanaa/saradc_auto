@@ -25,6 +25,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -44,6 +45,10 @@ def ngspice(netlist, workdir):
     path = os.path.join(workdir, "meas.sp")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(netlist)
+    init = os.environ.get("ADC_SPICEINIT")
+    if init:
+        shutil.copyfile(os.path.expanduser(init),
+                        os.path.join(workdir, ".spiceinit"))
     proc = subprocess.run(["ngspice", "-b", path], cwd=workdir,
                           capture_output=True, text=True, timeout=900)
     return proc.returncode, proc.stdout + proc.stderr

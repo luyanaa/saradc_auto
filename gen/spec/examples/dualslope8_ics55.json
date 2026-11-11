@@ -1,0 +1,60 @@
+{
+  "design": "dualslope8_ics55",
+  "arch": "dual_slope",
+  "pdk": "ics55_h7ch",
+  "scl": "ics55_LLSC_H7CH",
+  "resolution": 8,
+  "vdd": 1.2,
+  "fs_hz": 1000000,
+  "dnl_target_lsb": 0.5,
+  "input": {
+    "mode": "single_ended",
+    "vfs": 1.2
+  },
+  "cdac": {
+    "backend": "binary",
+    "cap": "moscap",
+    "cu_ff": "auto",
+    "sampling": "bottom_plate"
+  },
+  "comparator": {
+    "backend": "strongarm",
+    "trim_bits": 0
+  },
+  "sampling": {
+    "backend": "transmission_gate"
+  },
+  "logic": {
+    "timing": "sync",
+    "osr": 1,
+    "averaging": 1
+  },
+  "dual_slope": {
+    "variant": "one_resistor",
+    "phases": 2,
+    "auto_zero": true,
+    "vref": 1.2,
+    "v_int_max": 1.0,
+    "overhead_clocks": 4,
+    "c_integ_pf": 100.0
+  },
+  "calibration": {
+    "offset": true,
+    "gain": false,
+    "weights": false
+  },
+  "physical": {
+    "array": "row",
+    "dummies": true,
+    "guard_ring": true,
+    "pex": true
+  },
+  "evidence": {
+    "require": [
+      "behavioral",
+      "lvs",
+      "drc",
+      "pex"
+    ]
+  }
+}

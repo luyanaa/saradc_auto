@@ -1,0 +1,6 @@
+# Composed PDK roots (symlink farms) and LibreLane run directories.
+pdkroot/
+configs/*/runs/
+
+# Nix GC roots for the pinned toolchain (machine-local symlinks into /nix/store).
+.toolchain/

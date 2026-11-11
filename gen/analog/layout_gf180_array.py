@@ -99,6 +99,19 @@ def main() -> None:
     # exactly how B_i picks up the caps' FL pads and the TG's Z2.
     # Stripping them leaves the leaf nets nameless and the port merge
     # silent (every device terminal then maps onto one global net).
+    #
+    # The KLayout LVS deck (gf180mcu.lvs) reads every 34/10 and 36/10 text
+    # in the hierarchy and `make_top_level_pins` promotes each named net,
+    # so the leaf labels also surface as top ports (S/SB/Z2, and FL/Z1
+    # aliased onto B_i/REF_i).  For that deck only we emit a second,
+    # label-stripped copy of the identical geometry: connectivity is
+    # geometric, so the extracted netlist keeps the intended B*/REF*/VSH
+    # ports and the leaf nets simply become unnamed internal nodes.
+    if os.environ.get("GF180_ARRAY_LVS_STRIP") == "1":
+        leaf_names = {"FL", "VSH", "Z1", "Z2", "S", "SB"}
+        for lay in (M1T, M2T):
+            strip(cap, ly.layer(*lay), leaf_names)
+            strip(tg, ly.layer(*lay), leaf_names)
 
     top = ly.create_cell("SARADC_ARRAY_GF_4B")
     m1, m1t = ly.layer(*M1), ly.layer(*M1T)
@@ -131,12 +144,17 @@ def main() -> None:
                 k * CAP_PITCH + 1.86, 0.80, 0, dy)
         # hop to m2 for the TG entry: the TG's Z1 pad and VSS tap pad
         # occupy the m1 band, m2 rides over them into the m2 Z2 riser.
+        # The riser's bottom stub sits at local y 0.53-1.07, so the hop
+        # must climb from the strap band (y<=0.0) up to it -- a purely
+        # horizontal bar leaves the bit bus open to the TG Z2 side.
         box(top, m1, tg_x - 0.66, STRAP_Y[0] - 0.04, tg_x - 0.28,
             STRAP_Y[1] + 0.04, 0, dy)
         box(top, v1l, tg_x - 0.58, STRAP_Y[0] + 0.02,
             tg_x - 0.32, STRAP_Y[1] - 0.02, 0, dy)
         box(top, m2, tg_x - 0.70, STRAP_Y[0] - 0.10,
             tg_x + Z2_X[1], STRAP_Y[1] + 0.10, 0, dy)
+        box(top, m2, tg_x + Z2_X[0], STRAP_Y[0] - 0.10,
+            tg_x + Z2_X[1], Z2_LO[1] + 0.10, 0, dy)
         # label ON the strap metal: a label in empty space becomes its
         # own one-point net instead of naming the strap.
         label(top, m1t, f"B{bit}", row_right + 0.3,

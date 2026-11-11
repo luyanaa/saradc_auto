@@ -6,3 +6,7 @@ comp.out
 
 # generated run artifacts (GDS, PEX, decks, reports)
 gen/outputs/
+
+# simulation build products
+rtl/build/
+rtl/a.out

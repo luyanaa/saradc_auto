@@ -5,9 +5,10 @@
   run.py matrix --spec S                  one spec on every PDK profile
   run.py behavioral --spec S [--feas F]   L1 model chosen by spec["arch"]
   run.py report [--out FILE]              markdown matrix of all specs
+  run.py validate [--spec S]              schema-check one spec or all examples
   run.py check                            profile inputs that do not exist
                                           (generated decks under outputs are
-                                          reported, not failed)
+                                          reported, not failed) + spec schema
 """
 
 from __future__ import annotations
@@ -22,20 +23,30 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "verify"))
 
 import feasibility  # noqa: E402
+import spec_validate  # noqa: E402
 import behavioral_sar  # noqa: E402
 import behavioral_ramp  # noqa: E402
 import behavioral_sdm  # noqa: E402
 import behavioral_vco  # noqa: E402
+import behavioral_dualslope  # noqa: E402
+import behavioral_flash  # noqa: E402
+import behavioral_pipeline  # noqa: E402
+import behavioral_ti  # noqa: E402
 
 BEHAVIORAL = {
     "sar": behavioral_sar,
     "ramp": behavioral_ramp,
     "sdm": behavioral_sdm,
     "vco": behavioral_vco,
+    "dual_slope": behavioral_dualslope,
+    "flash": behavioral_flash,
+    "pipeline": behavioral_pipeline,
+    "ti": behavioral_ti,
 }
 
 PDK_DIR = os.path.join(HERE, "pdk")
 SPEC_DIR = os.path.join(HERE, "spec", "examples")
+SCHEMA_PATH = os.path.join(HERE, "spec", "spec.schema.json")
 OUTPUT_DIR = os.path.join(HERE, "outputs")
 
 
@@ -60,6 +71,22 @@ def load(path):
         return json.load(fh)
 
 
+def load_spec(path):
+    """Load a spec and fail closed on schema violations (G-X4).
+
+    The schema was documentation only; every command that consumes a spec
+    now validates it first, so a typo in a block name is an error instead of
+    a silently ignored override.
+    """
+    spec = load(path)
+    schema = spec_validate.load_schema(SCHEMA_PATH)
+    errors = spec_validate.validate(spec, schema)
+    if errors:
+        raise SystemExit(f"{path}: {len(errors)} schema error(s)\n  "
+                         + "\n  ".join(errors))
+    return spec
+
+
 # --------------------------------------------------------------------------
 
 def resolve_pdk(value):
@@ -82,7 +109,7 @@ def cmd_feasibility(argv):
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    report = feasibility.evaluate(load(args.spec), load(resolve_pdk(args.pdk)),
+    report = feasibility.evaluate(load_spec(args.spec), load(resolve_pdk(args.pdk)),
                                   args.headroom)
     print(feasibility.dump(report) if args.json else feasibility.human(report))
     return 0 if report["status"].startswith("PASS") else 1
@@ -95,7 +122,7 @@ def cmd_matrix(argv):
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    spec = load(args.spec)
+    spec = load_spec(args.spec)
     rows = []
     for path in profiles():
         try:
@@ -121,7 +148,7 @@ def cmd_behavioral(argv):
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    spec = load(args.spec)
+    spec = load_spec(args.spec)
     arch = str(spec.get("arch", "sar")).lower()
     backend = BEHAVIORAL.get(arch)
     if backend is None:
@@ -129,7 +156,14 @@ def cmd_behavioral(argv):
                          f"known: {', '.join(BEHAVIORAL)}")
     if args.osr is not None:
         spec.setdefault("logic", {})["osr"] = args.osr
-    samples = args.samples or (65536 if arch == "sdm" else 1024)
+    if args.samples:
+        samples = args.samples
+    elif arch == "sdm":
+        samples = 65536
+    elif arch == "ti":
+        samples = 8192
+    else:
+        samples = 1024
 
     feas = None
     if args.from_feasibility:
@@ -161,7 +195,7 @@ def cmd_report(argv):
               "|---|---|---|---|---|---|---|---|---|---|---|")
     lines = ["# ADC generator feasibility matrix", "", header]
     for spec_path in specs():
-        spec = load(spec_path)
+        spec = load_spec(spec_path)
         name = os.path.basename(spec_path)[:-5]
         for pdk_path in profiles():
             pdk = os.path.basename(pdk_path)[:-5]
@@ -186,6 +220,34 @@ def cmd_report(argv):
     else:
         print(text)
     return 0
+
+
+def cmd_validate(argv):
+    import argparse
+    ap = argparse.ArgumentParser(prog="run.py validate")
+    ap.add_argument("--spec", help="one spec; default: every example")
+    ap.add_argument("--schema", default=SCHEMA_PATH)
+    args = ap.parse_args(argv)
+
+    schema = spec_validate.load_schema(args.schema)
+    holes = spec_validate.unknown_keywords(schema)
+    if holes:
+        print("schema keywords not enforced by spec_validate: "
+              + ", ".join(holes))
+    paths = [args.spec] if args.spec else specs()
+    bad = 0
+    for path in paths:
+        spec = load(path)
+        errors = spec_validate.validate(spec, schema)
+        name = os.path.basename(path)
+        if errors:
+            bad += len(errors)
+            print(f"{name}: {len(errors)} error(s)")
+            for e in errors:
+                print("  " + e)
+        else:
+            print(f"{name}: ok")
+    return 0 if bad == 0 else 1
 
 
 def cmd_check(_argv):
@@ -217,6 +279,26 @@ def cmd_check(_argv):
                   f"absent; run the matching deck target)")
         else:
             print(f"{prof['id']}: ok")
+
+    # G-X4: the schema is now executed, not just documentation
+    schema = spec_validate.load_schema(SCHEMA_PATH)
+    holes = spec_validate.unknown_keywords(schema)
+    if holes:
+        bad += len(holes)
+        print(f"spec schema: {len(holes)} keyword(s) not enforced: "
+              + ", ".join(holes))
+    spec_bad = 0
+    for path in specs():
+        errors = spec_validate.validate(load(path), schema)
+        if errors:
+            spec_bad += len(errors)
+            print(f"{os.path.basename(path)}: {len(errors)} schema error(s)")
+            for e in errors:
+                print(f"    {e}")
+    if spec_bad:
+        bad += spec_bad
+    elif not holes:
+        print(f"spec schema: ok ({len(specs())} example specs)")
     return 0 if bad == 0 else 1
 
 
@@ -269,6 +351,7 @@ COMMANDS = {
     "behavioral": cmd_behavioral,
     "report": cmd_report,
     "analog": cmd_analog,
+    "validate": cmd_validate,
     "check": cmd_check,
 }
 
