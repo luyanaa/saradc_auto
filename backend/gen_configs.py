@@ -75,6 +75,16 @@ ARCHS = {
         "clock_period": 20,   # 256-cycle foreground calibration; relaxed on purpose
         "desc": "two-channel time-interleaved SAR",
     },
+    "sar": {
+        # The SAR digital core alone (Bug10): the block the hierarchical PEX
+        # consumes as a gate-level SPEF.  Its analog counterpart (CDAC + sw +
+        # cmp) extracts on its own GDS; this core is pure standard cells.
+        "top": "sar_logic_wreset",
+        "files": ["rtl/sar_logic_wreset.v"],
+        "clock_port": "CLK",   # the core's clock pin is CLK, not clk
+        "clock_period": 10,
+        "desc": "SAR controller FSM (standalone, for hierarchical PEX)",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -360,7 +370,7 @@ def emit(pdk_name: str, pdk: dict, arch_name: str, arch: dict) -> str:
     lines += [
         "VERILOG_INCLUDE_DIRS:",
         f"  - {rel('rtl/common')}",
-        f"CLOCK_PORT: clk",
+        f"CLOCK_PORT: {arch.get('clock_port', 'clk')}",
         f"CLOCK_PERIOD: {period}",
         "FP_CORE_UTIL: 30",
         "PL_TARGET_DENSITY_PCT: 35",
