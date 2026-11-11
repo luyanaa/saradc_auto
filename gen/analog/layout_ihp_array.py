@@ -39,24 +39,26 @@ OUT = os.environ.get("OUT", "/tmp/adcgen/flow/ihp/array4b.gds")
 IHP_ROOT = os.environ.get("IHP_ROOT") or glob.glob(
     os.path.expanduser("~/.ciel/ciel/ihp-sg13/versions/*/ihp-sg13g2"))[0]
 
-M1, M1T = (8, 0), (8, 2)
-V1 = (19, 0)
-M2, M2T = (10, 0), (10, 2)
-PIN_M1 = (8, 25)    # top-level pin purpose 25 on metal1 (REF/VDD nets)
-PIN_M2 = (10, 25)   # ... and on metal2 (B*/VSH nets); the text must sit on
-                    # the net's own metal or the deck cannot associate it
+import sys
+sys.path.insert(0, HERE)
+import layers as _layers
+L = _layers.load("ihp_sg13g2")
+M1, M1T = L.layer("M1"), L.layer("M1", "text")
+V1 = L.layer("VIA1")
+M2, M2T = L.layer("M2"), L.layer("M2", "text")
+PIN_M1 = L.layer("M1", "pin")    # top-level pin purpose on metal1 (REF/VDD)
+PIN_M2 = L.layer("M2", "pin")    # ... and metal2 (B*/VSH nets)
 
 NBITS = 4
-CAP_PITCH = 2.76     # exactly the cell width: the pmos nwells touch
-                     # edge-to-edge and merge into one strip (a 0.04-um
+CAP_PITCH = L.rule("cap_pitch")  # cell width: nwells abut and merge
+                     # edge-to-edge into one strip (a 0.04-um
                      # sliver between wells is an NW.b/NBL notch)
-ROW_PITCH = 5.20     # nwell edge gap >= 1.6 -> clears NW.b1/NBL.c and
-                     # merges the stacked cap nwells (kills the NW.b
-                     # same-net notch each 0.04-um column offset made)
+ROW_PITCH = L.rule("row_pitch")  # clears NW.b1/NBL.c (>1.6 um nwell gap)
 TG_GAP = 2.80        # cap field -> this row's TG; the TG's nBuLay ring
                      # needs > 2 um from the last cap's buried layer
                      # (NBL.d min PWell width between nBuLay regions)
-STAGGER = 1.00       # extra x per bit (decreasing: bit0 rightmost)
+STAGGER = L.rule("stagger")      # extra x per bit (decreasing: bit0 rightmost)
+
 FL_Y = (0.02, 0.28)  # cap FL rail / bit strap band (local y)
 Z2X = (-0.40, -0.24) # TG Z2 riser local x -- LEFT riser faces the caps
 Z1X = (0.98, 1.14)   # TG Z1 riser local x -- right riser, Z2's twin

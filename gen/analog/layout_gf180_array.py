@@ -38,17 +38,19 @@ import pya
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.environ.get("OUT", "/tmp/adcgen/flow/gf180/array4b.gds")
 
-M1, M1T = (34, 0), (34, 10)
-VIA1, M2, M2T = (35, 0), (36, 0), (36, 10)
+import sys
+sys.path.insert(0, HERE)
+import layers as _layers
+L = _layers.load("gf180mcu_fd_7t5v0")
+M1, M1T = L.layer("M1"), L.layer("M1", "pin")
+VIA1, M2, M2T = L.layer("VIA1"), L.layer("M2"), L.layer("M2", "pin")
 
 NBITS = 4
 CAP_PITCH = 5.50    # cap nwell spans x -0.80..4.70; abutting at 5.50
                     # merges the wells (a <0.6 um gap fires NW.2a_LV)
 ROW_PITCH = 8.80    # cell 7.90 + ~0.9 row gap (nwells touch vertically)
-TG_GAP = 1.45       # cap field -> this row's TG; >1.4 um nwell-to-nwell
-                    # (different-potential rule NW.2b_LV) between the
-                    # last cap's pmos well and the TG's pmos well
-STAGGER = 1.00      # extra x per bit (decreasing: bit0 rightmost)
+TG_GAP = L.rule("tg_gap")   # >1.4 um nwell-to-nwell (NW.2b_LV)
+STAGGER = L.rule("stagger") # extra x per bit (decreasing: bit0 rightmost)
 STRAP_Y = (-0.30, 0.0)   # strap band under every pad (S/D pads and
                          # taps sit at y>=0.55; the cap FL rail itself
                          # is y0.30..0.60, reached by per-cap stubs)

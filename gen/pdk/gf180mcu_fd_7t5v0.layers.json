@@ -1,0 +1,27 @@
+{
+  "pdk": "gf180mcu_fd_7t5v0",
+  "comment": "Layer/datatype map + DRC constants for the CDAC array generator.",
+  "layers": {
+    "M1":  { "drawing": [34, 0], "pin": [34, 10], "text": [34, 10] },
+    "VIA1":{ "drawing": [35, 0] },
+    "M2":  { "drawing": [36, 0], "pin": [36, 10], "text": [36, 10] }
+  },
+  "rules_um": {
+    "row_pitch": null,
+    "stagger": 1.00,
+    "tg_gap": 1.45,
+    "via_size": null,
+    "strap_y": [-0.30, 0.0],
+    "z2_x": [3.28, 3.58],
+    "z2_lo": [0.52, 0.82],
+    "z1_x": [-0.60, -0.35],
+    "comment": "gf180: TG_GAP > 1.4 um keeps the nwell-to-nwell spacing off NW.2a_LV."
+  },
+  "momcap": {
+    "unit_ff": 2.0,
+    "layers": ["M1", "M2"],
+    "finger_width_um": 0.23,
+    "finger_gap_um": 0.23,
+    "note": "180nm metal pitch"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "pdk": "ihp_sg13g2",
+  "comment": "Layer/datatype map + DRC constants for the CDAC array generator. The layout_<pdk>_array.py files must read this via layers.py instead of hardcoding (layer,datatype) pairs and um rules.",
+  "layers": {
+    "M1":  { "drawing": [8, 0],  "pin": [8, 25],  "text": [8, 2] },
+    "VIA1":{ "drawing": [19, 0] },
+    "M2":  { "drawing": [10, 0], "pin": [10, 25], "text": [10, 2] }
+  },
+  "rules_um": {
+    "cap_pitch": 2.76,
+    "row_pitch": 5.20,
+    "stagger": 1.00,
+    "tg_gap": null,
+    "via_size": null,
+    "comment": "ihp: cap pitch = cell width (nwells merge edge-to-edge); row pitch clears NW.b1/NBL.c (>1.6 um nwell gap).  The TG/cap cells are MOS-based so there is no separate metal fringe cap here."
+  },
+  "momcap": {
+    "unit_ff": 2.0,
+    "layers": ["M1", "M2"],
+    "finger_width_um": 0.16,
+    "finger_gap_um": 0.16,
+    "note": "lateral fringe between same-layer fingers; both plates on M1/M2 interdigitated"
+  }
+}

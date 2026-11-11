@@ -124,6 +124,34 @@ def topo_cap_unit(dev, p):
     return "\n".join(lines), meta
 
 
+def topo_cap_mom(dev, p):
+    """MOM (metal-fringe) unit capacitor -- replaces the non-linear MOSCAP.
+
+    Bug3 fix: the MOS gate cap swings ~1.8x across its C(V) curve as the
+    SAR walks each bit between VSS and VREF, which is the dominant source of
+    the measured -8%..+7% bit-weight error.  A lateral-flux metal cap has a
+    voltage coefficient below ~10 ppm/V, so the weight no longer depends on
+    the input or on where the search has parked each bottom plate.
+
+    Schematic model: an ideal (voltage-independent) capacitor of `c_ff`
+    between VSH and FL, plus the bottom-plate parasitic to substrate that a
+    real fringe cap carries (C_sub, a small fraction of the plate).  The
+    matching PCell lives in gen/analog/layout_mom_cap.py and draws the
+    fingers on the metal layers named by the PDK's layers.json momcap recipe.
+    """
+    c_ff = float(p.get("c_ff", 2.0))
+    # bottom-plate parasitic to substrate, ~10% of plate for a lateral cap
+    csub_ff = float(p.get("csub_ff", c_ff * 0.10))
+    lines = [".subckt SARADC_CAP_MOM VSH FL VNW VPW",
+             f"CMAIN VSH FL {c_ff:g}f",
+             f"CSUB FL VSS_SUB {csub_ff:g}f"]
+    lines.append(".ends")
+    meta = {"topology": "cap_mom", "kind": "mom", "c_ff": c_ff,
+            "csub_ff": csub_ff, "linear": True,
+            "ports": ["VSH", "FL", "VNW", "VPW"]}
+    return "\n".join(lines), meta
+
+
 def topo_switch_tg(dev, p):
     """Complementary transmission gate between Z1 and Z2.
 
@@ -255,6 +283,7 @@ def topo_cdac_binary(dev, p):
 
 TOPOLOGIES = {
     "cap_unit": topo_cap_unit,
+    "cap_mom": topo_cap_mom,
     "switch_tg": topo_switch_tg,
     "switch_bootstrap": topo_switch_bootstrap,
     "cmp_strongarm": topo_cmp_strongarm,

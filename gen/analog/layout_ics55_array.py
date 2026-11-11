@@ -58,15 +58,19 @@ import pya
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.environ.get("OUT", "/tmp/adcgen/flow/ics55/array4b.gds")
 
-M1, V1, M2 = (81, 1), (91, 1), (82, 1)
-L1, L2 = (81, 6), (82, 6)
+import sys
+sys.path.insert(0, HERE)
+import layers as _layers
+L = _layers.load("ics55_h7ch")
+M1, V1, M2 = L.layer("M1"), L.layer("VIA1"), L.layer("M2")
+L1, L2 = L.layer("M1", "pin"), L.layer("M2", "pin")
 
 NBITS = 4
 CAP_PITCH = 7.15    # cap bbox 7.03 wide
-ROW_PITCH = 5.20    # ringed TG is 4.10 tall (y -2.05..2.05)
+ROW_PITCH = L.rule("row_pitch")   # ringed TG is 4.10 tall
 TG_GAP = 1.50       # cap field -> this row's TG; leaves a free lane
                     # before the leaf's VSS ring frame for the via pad
-STAGGER = 0.80      # extra x per bit (decreasing: bit0 rightmost)
+STAGGER = L.rule("stagger")       # extra x per bit (decreasing: bit0 rightmost)
 
 STRAP_Y = (-0.86, -0.68)   # bit strap band, below all S/D m1 (-0.55)
 STUB_X = (2.00, 2.30)      # per-cap riser column, free corridor

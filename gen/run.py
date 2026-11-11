@@ -58,7 +58,8 @@ def is_build_artifact(path):
 
 def profiles():
     return [os.path.join(PDK_DIR, n)
-            for n in sorted(os.listdir(PDK_DIR)) if n.endswith(".json")]
+            for n in sorted(os.listdir(PDK_DIR))
+            if n.endswith(".json") and not n.endswith(".layers.json")]
 
 
 def specs():
