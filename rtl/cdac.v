@@ -2,6 +2,7 @@
 // This is the Capacitor DAC, doing the least significant bits (LSB)
 
 module SARADC_LSB_CDAC # (
+  parameter CAP_KIND = "MOSCAP",
   parameter integer NBITS = 7,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -13,14 +14,18 @@ module SARADC_LSB_CDAC # (
   inout [NBITS:0] VSH, FL // Debug signals (Capacitor terminals, there is one more for the dummy)
 );
   
+  // One MOM leaf is the unit; the MOSCAP unit is NPW*NPH gate caps.
+  localparam integer CAP_MULT = (CAP_KIND == "MOM") ? 1 : (NPW*NPH);
+
   genvar i;
   generate
     for(i = 0; i < NBITS; i = i + 1) begin : cdac_bit
       SARADC_CDAC_UNIT #(
+        .CAP_KIND(CAP_KIND),
         .NSW_VI(1 << i), // 1, 2, 4, 8...
         .NSW_VOUTH(1 << i), // 1, 2, 4, 8...
         .NSW_VOUTL(1 << i), // 1, 2, 4, 8...
-        .NSW_CAP((1 << i)*NPW*NPH) // 1, 2, 4, 8... and multiplied by NPW*NPH
+        .NSW_CAP((1 << i)*CAP_MULT) // 1, 2, 4, 8... and multiplied by CAP_MULT
       ) cdac_unit (
         .VDD(VDD), .VSS(VSS), 
         .CRI(CPRE), .CRIB(CPREB),
@@ -38,10 +43,11 @@ module SARADC_LSB_CDAC # (
   
   // The dummy CDAC
   SARADC_CDAC_UNIT #(
+    .CAP_KIND(CAP_KIND),
     .NSW_VI(1),
     .NSW_VOUTH(1),
     .NSW_VOUTL(1),
-    .NSW_CAP(NPW*NPH)
+    .NSW_CAP(CAP_MULT)
   ) cdac_unit (
     .VDD(VDD), .VSS(VSS), 
     .CRI(CPRE), .CRIB(CPREB),
@@ -57,6 +63,7 @@ endmodule
 // This is the Capacitor DAC, doing the most significant bit (MSB), singular
 
 module SARADC_MSB_CDAC # (
+  parameter CAP_KIND = "MOSCAP",
   parameter integer NBITS = 7,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -71,12 +78,15 @@ module SARADC_MSB_CDAC # (
   SARADC_CELL_TIEH tieh(.VDD(VDD), .VSS(VSS), .Z(one));
   SARADC_CELL_TIEL tiel(.VDD(VDD), .VSS(VSS), .ZN(zero));
   
+  localparam integer CAP_MULT = (CAP_KIND == "MOM") ? 1 : (NPW*NPH);
+
   // This CDAC unit is connected backwards
   SARADC_CDAC_UNIT #(
+    .CAP_KIND(CAP_KIND),
     .NSW_VI(1 << NBITS),
     .NSW_VOUTH(1 << NBITS),
     .NSW_VOUTL(1 << NBITS),
-    .NSW_CAP((1 << NBITS)*NPW*NPH)
+    .NSW_CAP((1 << NBITS)*CAP_MULT)
   ) cdac_unit (
     .VDD(VDD), .VSS(VSS), 
     .CRI(CHOLD), .CRIB(CHOLDB),

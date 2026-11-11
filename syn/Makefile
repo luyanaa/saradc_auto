@@ -9,6 +9,7 @@ export DIGTOP
 export SYN_DIG_SRC
 export ROOT_DIR
 export TECH
+export CAP_KIND
 
 SYN_ANA_NET=$(SYN_DIR)/outputs/$(TOP)_net.v
 SYN_NET=$(SYN_DIR)/outputs/$(DIGTOP)_net.v

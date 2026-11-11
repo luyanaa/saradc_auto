@@ -8,6 +8,11 @@
 
 (* keep_hierarchy = "yes" *)
 module SARADC #(
+`ifdef SARADC_CAP_MOM
+  parameter CAP_KIND = "MOM",
+`else
+  parameter CAP_KIND = "MOSCAP",
+`endif
   parameter integer NBITS = 5,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -27,6 +32,7 @@ module SARADC #(
   wire CMPO, CLKBUF;
 
   SARADC_ANALOG #(
+    .CAP_KIND(CAP_KIND),
     .NBITS(NBITS),
     .NPW(NPW),
     .NPH(NPH)

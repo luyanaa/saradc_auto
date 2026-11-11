@@ -19,6 +19,7 @@
     "layers": ["M1", "M2"],
     "finger_width_um": 0.20,
     "finger_gap_um": 0.21,
-    "note": "lateral fringe; values are the *real* sg13g2 DRC minima (M1.a=0.16 w, M1.b=0.18 s, Mn.a=0.20 w, Mn.b=0.21 s).  Both M1 and M2 fingers use the widest limit so the same comb is clean on both layers."
+    "note": "lateral fringe; values are the *real* sg13g2 DRC minima (M1.a=0.16 w, M1.b=0.18 s, Mn.a=0.20 w, Mn.b=0.21 s).  Both M1 and M2 fingers use the widest limit so the same comb is clean on both layers.",
+    "lef_layers": { "M1": "Metal1", "M2": "Metal2" }
   }
 }

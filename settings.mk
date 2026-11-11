@@ -24,6 +24,9 @@ $(ROOT_DIR)/rtl/sw.v \
 $(ROOT_DIR)/rtl/sar_logic_buf.v \
 $(ROOT_DIR)/rtl/saradc.v
 
+# "MOSCAP" (taped-out golden) or "MOM" (metal fringe cap, gen/analog)
+CAP_KIND?=MOSCAP
+
 DIGTOP=sar_logic_wreset
 SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v
 

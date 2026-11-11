@@ -2,6 +2,7 @@
 
 (* keep_hierarchy = "yes" *)
 module SARADC_ANALOG #(
+  parameter CAP_KIND = "MOSCAP",
   parameter integer NBITS = 8,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -38,20 +39,23 @@ module SARADC_ANALOG #(
   localparam nu = 1<<NBITS;
   localparam nc = ncircle(nu);
   localparam nall = nc * nc * 2 + nc * 6 + 4; // Area + perimeter (w being nc*2, h being nc)
-  localparam ndummy = nall - nu;
+  // The MOSCAP array is surrounded by a dummy ring for matching; the MOM
+  // array is a parametric hard macro that owns its own dummies, so the
+  // RTL ring is disabled for CAP_KIND=MOM.
+  localparam ndummy = (CAP_KIND == "MOM") ? 0 : (nall - nu);
 
   (* dont_touch = "yes" *)
   wire VOUTH, VOUTL;
 
   // CDAC dummy phase
-  SARADC_CDAC_DUMMY #(.N(ndummy), .NPW(NPW), .NPH(NPH)) dummy_h (.VDD(VDD), .VSS(VSS));
-  SARADC_CDAC_DUMMY #(.N(ndummy), .NPW(NPW), .NPH(NPH)) dummy_l (.VDD(VDD), .VSS(VSS));
+  SARADC_CDAC_DUMMY #(.CAP_KIND(CAP_KIND), .N(ndummy), .NPW(NPW), .NPH(NPH)) dummy_h (.VDD(VDD), .VSS(VSS));
+  SARADC_CDAC_DUMMY #(.CAP_KIND(CAP_KIND), .N(ndummy), .NPW(NPW), .NPH(NPH)) dummy_l (.VDD(VDD), .VSS(VSS));
   
   // CDAC MSB phase
   (* dont_touch = "yes" *)
   wire MSB_H_VSH, MSB_H_FL, MSB_L_VSH, MSB_L_FL;
   SARADC_MSB_CDAC #(
-    .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) msb_cdac_h (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB), .CHOLD(CHOLD), .CHOLDB(CHOLDB),
@@ -59,7 +63,7 @@ module SARADC_ANALOG #(
     .VSH(MSB_H_VSH), .FL(MSB_H_FL)
   );
   SARADC_MSB_CDAC #(
-    .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) msb_cdac_l (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB), .CHOLD(CHOLD), .CHOLDB(CHOLDB),
@@ -71,7 +75,7 @@ module SARADC_ANALOG #(
   (* dont_touch = "yes" *)
   wire [NBITS-1:0] LSB_H_VSH, LSB_H_FL, LSB_L_VSH, LSB_L_FL;
   SARADC_LSB_CDAC #(
-    .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) lsb_cdac_h (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB),
@@ -80,7 +84,7 @@ module SARADC_ANALOG #(
     .VSH(LSB_H_VSH), .FL(LSB_H_FL)
   );
   SARADC_LSB_CDAC #(
-    .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) lsb_cdac_l (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB),

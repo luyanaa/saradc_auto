@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
-"""8-bit binary CDAC array built from SARADC_CAP_MOM unit cells (Bug3).
+"""Binary CDAC cap bank built from abutting SARADC_CAP_MOM unit cells.
 
-    klayout -b -r gen/analog/layout_mom_array.py -rd pdk=ihp_sg13g2 \
-            -rd nbits=8 -rd c_ff=2.0 -rd out=/tmp/mom_array8.gds
+    klayout -b -r gen/analog/layout_mom_array.py
 
-Rows: bit i gets 2^i unit MOM caps abutted at the leaf pitch, plus one
-transmission gate (SARADC_SW_TG) that switches the bit's bottom plates
-between VREFH and VREFL.  Unlike the MOSCAP array:
+Environment:
+    pdk     PDK id in gen/pdk/<pdk>.layers.json  (default ihp_sg13g2)
+    nbits   number of binary bits                (default 8)
+    c_ff    unit capacitance in fF               (default 2.0)
+    out     output GDS                           (default /tmp/adcgen/flow/mom_array8.gds)
 
-  * the unit cap is pure metal -- no nwell, so rows can sit at a pitch set
-    by the momcap recipe's finger pitch, not the MOSCAP cell bbox;
-  * both plates are already bused inside the leaf (VSH top comb, FL bottom
-    comb), so the array only routes the per-bit FL strap to its TG and one
-    VSH rail down the side -- the leaf does the rest;
-  * the bottom-plate parasitic inside SARADC_CAP_MOM already accounts for
-    the fringe cap's substrate coupling, so no extra shield routing is
-    needed at array level.
+Topology (one row per bit):
 
-The leaf must be generated first (layout_mom_cap.py) and its GDS path is
-read from env ``CAP_GDS`` (defaults to the momcap output name).
+    VSH ----+----+----+ ... +----        common top plate, one rail per row
+            |    |    |      |           tied to a left spine
+          [C]  [C]  [C]    [C]           2^bit unit leaves, abutted
+            |    |    |      |
+    FL  ----+----+----+ ... +----  B<bit>   switched bottom plate
 
-Pinout: VSH (common top plate), B0..B7 (per-bit switched bottom plates to
-the TG array), VREFH, VREFL, VDD, VSS.  The digital logic drives each TG's
-S/SB to pick the reference the bottom plate sees.
+The row's FL rail is the B<bit> pin: the transmission gate that selects
+VREFH/VREFL lives in the analog macro (RTL SARADC_SW / layout
+SARADC_SW_TG_<pdk>), not inside the capacitor array.  Keeping the switch
+out of the cap bank is what makes both blocks independently tileable and
+is how the analog hard macro is assembled.
+
+The first revision of this file placed the TG inside the row and ran the
+FL strap above the leaf even though the leaf's FL bus is at its bottom
+edge; DRC was clean only because the strap and the leaf's guard ring
+merged into one polygon (a VSS/FL short).  The cover cell is gone and this
+array is extracted with Magic, so the 1:2:4:... ratio is measured, not
+asserted.
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ import pya
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import layers as _layers  # noqa: E402
+import mom_geom  # noqa: E402
 
 PDK = os.environ.get("pdk", os.environ.get("PDK", "ihp_sg13g2"))
 NBITS = int(os.environ.get("nbits", "8"))
@@ -44,39 +51,28 @@ OUT = os.environ.get("out", os.environ.get("OUT",
 
 L = _layers.load(PDK)
 REC = L.momcap()
-# leaf geometry, matching layout_mom_cap.py
 FW = float(REC.get("finger_width_um", 0.20))
 FG = float(REC.get("finger_gap_um", 0.21))
+MLAYERS = REC.get("layers", ["M1", "M2"])
+
+FRINGE_FF_PER_UM = 0.20
 FINGER_LEN = 3.0
-MARGIN = 0.5
-SHIELD_W = 0.5
-# the leaf's footprint: width x height as drawn by emit_cell
-fringe_ff_per_um = 0.20
-need_um = C_FF / fringe_ff_per_um
-n_pairs = max(2, int(round(need_um / (2 * FINGER_LEN))))
-LEAF_W = n_pairs * (FW + FG) + FG
-LEAF_H = FINGER_LEN + 2 * MARGIN + FG + FW + SHIELD_W + MARGIN
-CAP_PITCH = LEAF_W + 0.30          # + shield-to-shield clearance
-ROW_PITCH = LEAF_H + 2.50          # room for the per-bit FL strap + TG
-TG_GAP = 1.50
+N_FINGERS = mom_geom.finger_count(C_FF, FRINGE_FF_PER_UM, FINGER_LEN)
+G = mom_geom.leaf(FW, FG, FINGER_LEN, N_FINGERS)
 
-M1 = L.layer("M1"); PIN_M1 = L.layer("M1", "pin")
-M2 = L.layer("M2"); PIN_M2 = L.layer("M2", "pin")
-VIA1 = L.layer("VIA1")
+LEAF_W, LEAF_H, BUS_H = G["width"], G["height"], G["bus_h"]
+CAP_PITCH = LEAF_W                      # abut: buses merge, no extra gap
+ROW_GAP = 1.6
+ROW_PITCH = LEAF_H + ROW_GAP
+X0 = 0.0                                # first leaf origin
+PAD = 1.6                               # ring-to-array clearance
+RING_W = 0.5
 
 
-def load_leaf(ly, path, want):
-    ly.read(path)
-    for c in ly.each_cell():
-        if c.name == want:
-            return c
-    raise SystemExit(f"{path}: cell {want} not found")
-
-
-def box(cell, layer, x1, y1, x2, y2, dx=0.0, dy=0.0):
+def box(cell, layer, x1, y1, x2, y2):
     cell.shapes(layer).insert(pya.Box(
-        int(round((x1 + dx) * 1000)), int(round((y1 + dy) * 1000)),
-        int(round((x2 + dx) * 1000)), int(round((y2 + dy) * 1000))))
+        int(round(x1 * 1000)), int(round(y1 * 1000)),
+        int(round(x2 * 1000)), int(round(y2 * 1000))))
 
 
 def pin(cell, name, x, y, layer):
@@ -84,88 +80,91 @@ def pin(cell, name, x, y, layer):
         int(round(x * 1000)), int(round(y * 1000))))))
 
 
+
+
 def main():
     cap_gds = os.environ.get("CAP_GDS") or os.path.join(
         HERE, "..", "outputs", "pdk_flow", PDK.split("_")[0],
         "cap_mom.gds")
-    tg_gds = os.environ.get("TG_GDS") or os.path.join(
-        HERE, "..", "outputs", "pdk_flow", PDK.split("_")[0], "tg",
-        "switch_tg.gds")
     ly = pya.Layout()
     ly.dbu = 0.001
-    cap = load_leaf(ly, cap_gds, "SARADC_CAP_MOM")
-    # each bit row gets one transmission gate that switches the bottom
-    # plate between VREFH and VREFL; the leaf is required now (assembly
-    # no longer defers it)
-    tg = load_leaf(ly, tg_gds, "SARADC_SW_TG_IHP")
+    ly.read(cap_gds)
+    cap = ly.cell("SARADC_CAP_MOM")
+
+    m1, m2 = ly.layer(*L.layer(MLAYERS[0])), ly.layer(*L.layer(MLAYERS[1]))
+    pinm1 = ly.layer(*L.layer(MLAYERS[0], "pin"))
+    pinm2 = ly.layer(*L.layer(MLAYERS[1], "pin"))
+    via = ly.layer(*L.layer("VIA1"))
 
     top = ly.create_cell(f"SARADC_MOM_ARRAY_{NBITS}B")
-    m1, m2 = ly.layer(*M1), ly.layer(*M2)
-    pinm1, pinm2 = ly.layer(*PIN_M1), ly.layer(*PIN_M2)
+    max_right = (1 << (NBITS - 1)) * CAP_PITCH
 
-    # VSH rail down the left edge on m2
-    vsh_x = (-0.85, -0.60)
-
-    # TG leaf geometry (from layout_ihp_tg.py): the Z2 crown pad faces the
-    # cap field at local x -0.50..-0.17, y 2.74..2.95; the Z1 riser is at
-    # local x ~0.98..1.14 on m1 (right side); VDD/VSS taps near x1.6.
-    TG_Z2 = (-0.50, -0.17, 2.74, 2.95)   # bottom-plate side (faces caps)
-    TG_Z1 = (0.98, 1.14, 0.0, 2.95)      # reference side (m1 riser)
+    # left VSH spine, clear of the row rails by > fg
+    spine_x0, spine_x1 = X0 - 0.9, X0 - 0.6
 
     for bit in range(NBITS):
         ncap = 1 << bit
-        dy = bit * ROW_PITCH
-        row_right = ncap * CAP_PITCH
+        dy = PAD + bit * ROW_PITCH
+        row_right = X0 + ncap * CAP_PITCH
         for k in range(ncap):
             top.insert(pya.CellInstArray(
                 cap, pya.Trans(pya.Vector(
-                    int(round(k * CAP_PITCH * 1000)),
+                    int(round((X0 + k * CAP_PITCH) * 1000)),
                     int(round(dy * 1000))))))
-        # place this row's TG just right of the cap field, vertically
-        # centred so its Z2 crown (local y ~2.8) meets the row's FL strap
-        tg_x = row_right + TG_GAP
-        tg_dy = dy + LEAF_H - 2.95        # align Z2 crown with the strap
-        top.insert(pya.CellInstArray(
-            tg, pya.Trans(pya.Vector(
-                int(round(tg_x * 1000)), int(round(tg_dy * 1000))))))
-        # per-bit FL strap (bottom plates) on m2, run under the row and
-        # land on the TG's Z2 crown pad (bottom-plate terminal)
-        strap_y = dy + LEAF_H + 0.3
-        box(top, m2, 0.0, strap_y, tg_x + TG_Z2[0], strap_y + FG + 0.2)
-        # riser up to the Z2 crown (which is at tg local y 2.74..2.95)
-        box(top, m2, tg_x + TG_Z2[0], tg_dy + TG_Z2[2],
-            tg_x + TG_Z2[1], strap_y + FG + 0.2)
-        pin(top, f"B{bit}", tg_x + TG_Z2[0] - 0.1, strap_y + 0.1, pinm2)
-        # the TG's Z1 riser is the reference terminal: label it per bit.
-        # The reference driver (VREFH/VREFL selection) lands here.
-        pin(top, f"REF{bit}", tg_x + TG_Z1[0] + 0.05, tg_dy + 1.30, pinm1)
+        # FL (bottom plate) rail: overlaps every leaf's FL bus and carries
+        # the bit's pin.  Starts right of the VSH spine.
+        # No rail vias: the rail's M1 and M2 are joined through the leaf's
+        # own via row (rail M2 -> leaf bus M2 -> leaf via -> leaf bus M1 ->
+        # rail M1).  Adding rail vias on top of the leaf vias makes
+        # partially-overlapping 0.19 cuts, which violates V1.a (min=max).
+        box(top, m2, X0 - 0.3, dy, row_right + 0.3, dy + BUS_H)
+        box(top, m1, X0 - 0.3, dy, row_right + 0.3, dy + BUS_H)
+        pin(top, f"B{bit}", row_right + 0.15, dy + BUS_H / 2, pinm2)
+        pin(top, f"B{bit}", row_right + 0.15, dy + BUS_H / 2, pinm1)
+        # VSH (top plate) rail: overlaps every leaf's VSH bus, ties into
+        # the left spine.
+        vy0 = dy + LEAF_H - BUS_H
+        box(top, m2, spine_x0, vy0, row_right + 0.3, vy0 + BUS_H)
+        box(top, m1, spine_x0, vy0, row_right + 0.3, vy0 + BUS_H)
 
-    # common VSH bus.  Each leaf's top comb bus is already VSH inside the
-    # cell at the row's top edge.  A single continuous m2 rail laid over the
-    # whole row's top-bus band merges with every leaf's bus into one wide
-    # shape -- much cleaner than per-leaf drops, which left <0.21 um notches
-    # against the neighbouring shield/bus metal.  One left-edge spine ties
-    # all the row rails together.
-    # leaf top bus sits at local y MARGIN+FG+FINGER_LEN .. +FW (the VSH comb
-    # bus), i.e. ~3.71..3.91 within the cell -- well below the cell top.
-    # Cover that band continuously so it merges with every leaf's bus.
-    vsh_bus_y0 = MARGIN + FG + FINGER_LEN         # ~3.71
-    vsh_bus_y1 = vsh_bus_y0 + FW                   # ~3.91
-    for bit in range(NBITS):
-        dy = bit * ROW_PITCH
-        ncap = 1 << bit
-        row_right = ncap * CAP_PITCH
-        box(top, m2, -0.2, dy + vsh_bus_y0, row_right + 0.2, dy + vsh_bus_y1)
-    box(top, m2, vsh_x[0], -0.4, vsh_x[1], (NBITS - 1) * ROW_PITCH + LEAF_H + 0.5)
-    # link the spine into each row rail at the row's left end
-    for bit in range(NBITS):
-        dy = bit * ROW_PITCH
-        box(top, m2, vsh_x[0], dy + vsh_bus_y0, LEAF_W * 0.3, dy + vsh_bus_y1)
-    pin(top, "VSH", (vsh_x[0] + vsh_x[1]) / 2, -0.2, pinm2)
+    # VSH spine down the left edge, plus its pin
+    top_y = PAD + (NBITS - 1) * ROW_PITCH + LEAF_H
+    box(top, m2, spine_x0, PAD, spine_x1, top_y)
+    box(top, m1, spine_x0, PAD, spine_x1, top_y)
+    pin(top, "VSH", (spine_x0 + spine_x1) / 2, PAD + 0.3, pinm2)
+    pin(top, "VSH", (spine_x0 + spine_x1) / 2, PAD + 0.3, pinm1)
 
+    # guard ring around the whole bank, stitched M1/M2, tied to VSS
+    rx0, ry0 = spine_x0 - PAD, PAD - PAD
+    rx1, ry1 = X0 + max_right + PAD, top_y + PAD
+    for layer in (m1, m2):
+        box(top, layer, rx0, ry0, rx1, ry0 + RING_W)
+        box(top, layer, rx0, ry1 - RING_W, rx1, ry1)
+        box(top, layer, rx0, ry0, rx0 + RING_W, ry1)
+        box(top, layer, rx1 - RING_W, ry0, rx1, ry1)
+    # stitch the ring, inset from the corners so the two via rows never
+    # come closer than V1.b (0.22)
+    inset = 0.4
+    for x in mom_geom.via_positions(rx1 - rx0 - 2 * (RING_W + inset), BUS_H):
+        xa = rx0 + RING_W + inset + x
+        for yc in (ry0 + RING_W / 2, ry1 - RING_W / 2):
+            box(top, via, xa - mom_geom.VIA / 2, yc - mom_geom.VIA / 2,
+                xa + mom_geom.VIA / 2, yc + mom_geom.VIA / 2)
+    for y in mom_geom.via_positions(ry1 - ry0 - 2 * (RING_W + inset), BUS_H):
+        ya = ry0 + RING_W + inset + y
+        for xc in (rx0 + RING_W / 2, rx1 - RING_W / 2):
+            box(top, via, xc - mom_geom.VIA / 2, ya - mom_geom.VIA / 2,
+                xc + mom_geom.VIA / 2, ya + mom_geom.VIA / 2)
+    pin(top, "VSS", rx0 + RING_W / 2, (ry0 + ry1) / 2, pinm1)
+
+    out_dir = os.path.dirname(OUT)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     ly.write(OUT)
+    bb = top.bbox()
     print(f"wrote {OUT}  cell={top.name}  nbits={NBITS} "
-          f"leaf={LEAF_W:.2f}x{LEAF_H:.2f}  bbox={top.bbox().to_s()}")
+          f"leaf={LEAF_W:.2f}x{LEAF_H:.2f}  "
+          f"bbox={bb.width() * ly.dbu:.2f}x{bb.height() * ly.dbu:.2f} um")
 
 
 if __name__ == "__main__":

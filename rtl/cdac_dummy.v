@@ -3,6 +3,7 @@
 // For matching purposes
 
 module SARADC_CDAC_UNIT_DUMMY # (
+  parameter CAP_KIND = "MOSCAP",
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
 ) (
@@ -15,6 +16,7 @@ module SARADC_CDAC_UNIT_DUMMY # (
   // wire CRI, CRIB, CRH, CRHB, CRL, CRLB, 
   wire VI, VOUTH, VOUTL, VSH, FL;
   SARADC_CDAC_UNIT #(
+    .CAP_KIND(CAP_KIND),
     .NSW_VI(1),
     .NSW_VOUTH(1),
     .NSW_VOUTL(1),
@@ -30,6 +32,7 @@ module SARADC_CDAC_UNIT_DUMMY # (
 endmodule
 
 module SARADC_CDAC_DUMMY # (
+  parameter CAP_KIND = "MOSCAP",
   parameter integer N = 68,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -44,7 +47,7 @@ module SARADC_CDAC_DUMMY # (
   genvar i;
   generate
     for(i = 0; i < N; i = i + 1) begin : dummy
-      SARADC_CDAC_UNIT_DUMMY #(.NPW(NPW), .NPH(NPH)) dummy (
+      SARADC_CDAC_UNIT_DUMMY #(.CAP_KIND(CAP_KIND), .NPW(NPW), .NPH(NPH)) dummy (
         .VDD(VDD), .VSS(VSS),
         .CRI(zero), .CRIB(one), // Disabled
         .CRH(zero), .CRHB(one), // Disabled

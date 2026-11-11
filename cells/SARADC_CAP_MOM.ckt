@@ -1,0 +1,12 @@
+** Cell name: SARADC_CAP_MOM
+** Lib name: SARADC_MOM
+** 2 fF lateral MOM unit cap (gen/analog/layout_mom_cap.py).
+** Values are Magic PEX of cells/SARADC_CAP_MOM.gds, not the analytic
+** estimate:  C(VSH,FL)=1.879 fF, C_FL,sub=C_VSH,sub=0.631 fF.
+** A metal fringe cap has no depletion region, so unlike
+** SARADC_CELL_INVX16_ASCAP these values do not move with bias.
+.SUBCKT SARADC_CAP_MOM VSH FL VSS
+Cmain VSH FL 1.879f
+Cfl   FL  VSS 0.631f
+Cvsh  VSH VSS 0.631f
+.ENDS

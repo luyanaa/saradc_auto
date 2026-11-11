@@ -22,6 +22,7 @@
     "layers": ["M1", "M2"],
     "finger_width_um": 0.28,
     "finger_gap_um": 0.28,
-    "note": "real gf180mcu DRC: metal1 min w/s=0.23, metal2 min w/s=0.28.  Fingers on both layers use the widest limit (0.28)."
+    "note": "real gf180mcu DRC: metal1 min w/s=0.23, metal2 min w/s=0.28.  Fingers on both layers use the widest limit (0.28).",
+    "lef_layers": { "M1": "Metal1", "M2": "Metal2" }
   }
 }

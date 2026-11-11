@@ -29,6 +29,11 @@ module SARADC_CELL_INVX16_ASCAP(
 endmodule
 
 (* blackbox *)
+module SARADC_CAP_MOM(VSH, FL, VSS);
+    inout VSH, FL, VSS;
+endmodule
+
+(* blackbox *)
 module SARADC_FILLTIE2(vdd, vss);
     inout vdd, vss;
 endmodule
@@ -36,12 +41,6 @@ endmodule
 (* blackbox *)
 module sg13g2f_TIEH(z, vdd, vss);
     output z;
-    inout vdd, vss;
-endmodule
-
-(* blackbox *)
-module sg13g2f_TIEL(zn, vdd, vss);
-    output zn;
     inout vdd, vss;
 endmodule
 

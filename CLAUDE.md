@@ -84,19 +84,46 @@ other's internals:
 - merged netlist: `saradc_hier.spice` concatenates the three with a black-box
   boundary; top-level interconnect extraction is the remaining piece.
 
-## MOM capacitor (Bug3 -- implemented)
+## MOM capacitor (Bug3 -- implemented, wired into RTL)
 - Schematic: `topo_cap_mom` in `gen/analog/macro_gen.py` (ideal fringe cap +
-  Csub/CWnw parasitics, voltage-independent).  Select with
-  `run.py analog --cap-kind mom`; `cdac_binary` then emits SARADC_CAP_MOM.
-- Layout PCell: `gen/analog/layout_mom_cap.py` (interdigitated metal combs +
-  shield ring, layers from `<pdk>.layers.json` `momcap`).  ihp: DRC clean.
-- Array: `gen/analog/layout_mom_array.py` -- 8-bit binary MOM CDAC, ihp DRC
-  clean (172x62 um).
+  Csub/CWnw parasitics, voltage-independent).
+- **RTL select:** `SARADC`/`SARADC_ANALOG`/`CDAC*`/`SARADC_CAP` all take
+  `parameter CAP_KIND = "MOSCAP"`.  `CAP_KIND="MOM"` instantiates the
+  `SARADC_CAP_MOM` blackbox instead of `SARADC_CELL_INVX16_ASCAP`, sets
+  `CAP_MULT=1` (one leaf per binary element instead of NPW*NPH gate caps) and
+  disables the RTL dummy ring.  Ports are unchanged.
+- Flow switch: `CAP_KIND=MOM` in `settings.mk` / env -> `syn/tcl/synthesis_analog.tcl`
+  does `verilog_defines -DSARADC_CAP_MOM`, which flips `SARADC`'s default to
+  `"MOM"`.  Verified with yosys: default 4271 cells / 720 ASCAP; `-DSARADC_CAP_MOM`
+  1671 cells / 64 `SARADC_CAP_MOM` / 0 ASCAP; both elaborate in iverilog.
+- Abstract cell: `cells/SARADC_CAP_MOM.{gds,lef,ckt,cdl,port.csv}`.  LEF is
+  1.85x4.21 um with VSH (top bus) / FL (bottom bus) pins.  SPICE values are
+  Magic PEX of the shipped GDS: `Cmain=1.879 fF`, `Cfl=Cvsh=0.631 fF`
+  (voltage-independent, no depletion region).  Registered in
+  `cells/settings.tcl` (LEFS/CDLS) and `cells/sg13g2f_blackboxes.v`.
+- Geometry: `gen/analog/layout_mom_cap.py` (leaf) and `layout_mom_array.py`
+  (array) share `gen/analog/mom_geom.py`, so leaf/array pitch/margins cannot
+  drift.  Leaf = interdigitated M1/M2 combs, both buses VIA1-stitched; no
+  per-leaf ring (ring is drawn once around the array so leaves abut).
+  ihp: leaf and 8-bit array DRC 0 (array 240.9x48.1 um).
+- Array topology: one row per bit, 2^bit leaves abutted at the leaf pitch;
+  rows expose `B<bit>` (switched bottom plate) + one `VSH` rail/spine.  The
+  VREFH/VREFL TG is **not** in the array -- it is instantiated by the analog
+  macro (`SARADC_SW` in RTL / `SARADC_SW_TG_<pdk>` layout).
 - PDK abstraction: `gen/analog/layers.py` + `gen/pdk/<pdk>.layers.json`
-  (layer/datatype map + um DRC constants); the three `layout_*_array.py` read
-  it instead of hardcoding layers.
+  (layer/datatype map + um DRC constants + `momcap` recipe incl. LEF layer
+  names); the three `layout_*_array.py` read it instead of hardcoding layers.
 - Behavioral evidence (`--cv` in `gen/verify/behavioral_sar.py`): cv=0.8 MOSCAP
   -> ENOB 2.53 / INL 37 LSB; cv=0 MOM -> ENOB 7.54 / INL 0.2 LSB.
+- Magic PEX caveat: hierarchical extraction does NOT merge a parent M2 strap
+  lying over a child's M2 bus -- run `gds flatten true` before `extract` (or
+  give the leaf M2 its own port) or the strap extracts as a floating `_uq0`
+  node.  Flat PEX of the 8-bit array reads B0..B7 vs VSH as
+  1.958/4.147/8.456/17.07/34.31/68.78/137.72/275.60 fF (B1+ within 2% of 2x).
+- IHP via rule: V1.a is min=max 0.19 um, so stitching via cuts are exactly
+  0.19 (a 0.20 cut fails "max").  Array rails carry no vias of their own --
+  they join through the leaf's via row; adding rail vias on the leaf vias
+  forms 0.24-wide partial-overlap cuts that violate V1.a.
 
 ## Conventions
 - Commit only when the user asks; end commit messages with

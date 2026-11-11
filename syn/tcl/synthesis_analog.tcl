@@ -47,6 +47,13 @@ puts "LIBFF = $LIBFF"
 ################################################################
 ## Verilog read
 ################################################################
+# CAP_KIND=MOM flips SARADC's default to the metal fringe cap.  yosys
+# cannot take a string chparam, so the switch is a preprocessor define.
+if {[info exists ::env(CAP_KIND)] && $::env(CAP_KIND) eq "MOM"} {
+  puts "CAP_KIND=MOM: SARADC_CAP_MOM selected"
+  verilog_defines -DSARADC_CAP_MOM
+}
+
 foreach src $SYN_SRC {
   read_verilog $src
 }

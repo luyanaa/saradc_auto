@@ -3,6 +3,7 @@
 // The capacitor uses the biggest possible inverter in the std cell library
 
 module SARADC_CDAC_UNIT # (
+  parameter CAP_KIND = "MOSCAP",
   parameter integer NSW_VI = 1,
   parameter integer NSW_VOUTH = 1,
   parameter integer NSW_VOUTL = 1,
@@ -51,7 +52,7 @@ module SARADC_CDAC_UNIT # (
   
   generate
     for(i = 0; i < NSW_CAP; i = i + 1) begin : cap
-      SARADC_CAP cap (
+      SARADC_CAP #(.CAP_KIND(CAP_KIND)) cap (
         .VNW(VDD), .VPW(VSS),
         .VSH(VSH), .FL(FL)
       );

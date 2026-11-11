@@ -22,6 +22,7 @@
     "layers": ["M1", "M2"],
     "finger_width_um": 0.10,
     "finger_gap_um": 0.10,
-    "note": "real ics55 H7CH DRC: m1_width/space=0.09, m2_width/space=0.10.  Fingers on both layers use the widest limit (0.10) so the comb is clean on M1 and M2."
+    "note": "real ics55 H7CH DRC: m1_width/space=0.09, m2_width/space=0.10.  Fingers on both layers use the widest limit (0.10) so the comb is clean on M1 and M2.",
+    "lef_layers": { "M1": "MET1", "M2": "MET2" }
   }
 }
