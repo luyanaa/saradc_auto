@@ -61,7 +61,7 @@ def emit_cell(ly, name, c_ff):
     n_pairs = max(2, int(round(need_um / (2 * finger_len))))
     pitch = FW + FG
     width = n_pairs * pitch + FG            # fingers + outer gaps
-    height = finger_len + 2 * MARGIN
+    height = finger_len + 2 * MARGIN + FG
 
     def box(layer, x1, y1, x2, y2):
         cell.shapes(layer).insert(pya.Box(
@@ -75,26 +75,34 @@ def emit_cell(ly, name, c_ff):
     for mname in MLAYERS:
         m = ly.layer(*L.layer(mname))
         mt = ly.layer(*L.layer(mname, "pin"))
-        # interdigitated combs: even fingers -> VSH, odd -> FL
+        # interdigitated combs: VSH fingers hang DOWN from the top bus, FL
+        # fingers hang UP from the bottom bus, alternating so every finger's
+        # two long edges face the opposite terminal.  Both buses run full
+        # width so every finger is connected (no dangling metal).
         for i in range(n_pairs):
             x = FG + i * pitch
-            y = MARGIN
-            target = m if i % 2 == 0 else m
-            # VSH comb finger (even) hangs from top bus, FL (odd) from bottom
             if i % 2 == 0:
-                box(m, x, y, x + FW, y + finger_len)
+                # VSH finger: from the top bus down into the array
+                box(m, x, MARGIN + FG, x + FW, MARGIN + FG + finger_len)
             else:
-                box(m, x, y, x + FW, y + finger_len)
-        # top and bottom comb buses
-        box(m, 0, MARGIN + finger_len, width, MARGIN + finger_len + FW)  # VSH bus
-        box(m, 0, 0, width, MARGIN - FG)                                # FL bus
-        # grounded shield ring
+                # FL finger: from the bottom bus up into the array
+                box(m, x, MARGIN, x + FW, MARGIN + finger_len)
+        # comb buses: VSH across the top, FL across the bottom
+        box(m, 0, MARGIN + FG + finger_len, width,
+            MARGIN + FG + finger_len + FW)          # VSH bus (top)
+        box(m, 0, 0, width, MARGIN)                          # FL bus (bottom)
+        # grounded shield ring around the perimeter
         box(m, -SHIELD_W - MARGIN, -SHIELD_W, -MARGIN, height + SHIELD_W)
         box(m, width + MARGIN, -SHIELD_W, width + MARGIN + SHIELD_W,
             height + SHIELD_W)
+        box(m, -SHIELD_W - MARGIN, height + MARGIN,
+            width + MARGIN + SHIELD_W, height + MARGIN + SHIELD_W)
+        box(m, -SHIELD_W - MARGIN, -SHIELD_W - MARGIN,
+            width + MARGIN + SHIELD_W, -MARGIN)
         # terminal labels on the pin purpose
-        label(mt, "VSH", width / 2, MARGIN + finger_len + FW / 2)
-        label(mt, "FL", width / 2, (MARGIN - FG) / 2)
+        label(mt, "VSH", width / 2, MARGIN + FG + finger_len + FW / 2)
+        label(mt, "FL", width / 2, MARGIN / 2)
+        label(mt, "VSS", -SHIELD_W / 2 - MARGIN, height / 2)
 
     achieved = n_pairs * 2 * finger_len * fringe_ff_per_um
     return cell, achieved

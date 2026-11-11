@@ -76,6 +76,13 @@ MODELS = {
     "ihp": [
         dict(design="cap_unit", script="layout_ihp_cap.py",
              gds="cap_unit.gds", top="cap_unit3"),
+        dict(design="cap_mom", script="layout_mom_cap.py",
+             gds="cap_mom.gds", top="SARADC_CAP_MOM", passive=True,
+             # Magic PEX is device-centric; a metal-only leaf extracts a
+             # port-less netlist, so PEX is deferred to the hierarchical
+             # pass (hier_pex.py) which treats it as a parasitic primitive.
+             pex="skip",
+             env={"pdk": "ihp_sg13g2"}),
         dict(design="switch_tg", script="layout_ihp_tg.py",
              gds="switch_tg.gds", top="SARADC_SW_TG_IHP"),
         dict(design="array4b", script="layout_ihp_array.py",
@@ -110,6 +117,7 @@ CONTEXT = {"ihp": set(), "gf180": {"DF.13_MV", "DF.14_MV"},
 def build(pdk, spec, root, out) -> Path:
     gds = out / spec["gds"]
     env = dict(os.environ, OUT=str(gds))
+    env.update(spec.get("env") or {})      # per-design env (e.g. momcap pdk id)
     if pdk == "ihp":
         env["IHP_ROOT"] = str(root)
     elif pdk == "ics55":
@@ -170,6 +178,11 @@ SCHEM = {
 .SUBCKT cap_unit3 FL VSH VNW VPW
 XMN FL VSH FL VPW sg13_lv_nmos w=0.15u l=0.13u
 XMP FL VSH FL VNW sg13_lv_pmos w=0.15u l=0.13u
+.ENDS
+""",
+    ("ihp", "cap_mom"): """\
+.SUBCKT SARADC_CAP_MOM VSH FL VNW VPW
+C$1 VSH FL 2f
 .ENDS
 """,
     ("ihp", "switch_tg"): """\
@@ -292,6 +305,14 @@ ARRAY_REASON = {
 
 
 def lvs(pdk, design, gds, top, root, out, spec=None) -> dict:
+    # A passive leaf (pure metal MOM/fringe cap, no devices) has nothing for a
+    # device extractor to find: neither the KLayout MIM extractor nor
+    # Magic+netgen's MOS path emits a capacitor from drawn metal.  DRC-clean +
+    # the generated GDS is the honest sign-off evidence for these cells; an
+    # LVS reference is meaningless (nothing on the schematic side to match).
+    if spec and spec.get("passive"):
+        return {"ok": None, "note": "passive leaf: no devices; DRC-clean is "
+                "the evidence (LVS n/a)"}
     sch = SCHEM.get((pdk, design))
     if design == "array4b" and pdk == "ihp":
         sch = ihp_array_ref()
@@ -392,8 +413,11 @@ def audit(pdk, root, out):
             row["layout"] = True
             d = drc(pdk, gds, spec["top"], root, work)
             row["drc"] = d
-            p = pex(pdk, gds, spec["top"], root, work)
-            row["pex"] = p
+            if spec.get("pex") == "skip":
+                row["pex"] = {"ok": None, "note": "passive leaf; PEX deferred "
+                              "to hier_pex"}
+            else:
+                row["pex"] = pex(pdk, gds, spec["top"], root, work)
             l = lvs(pdk, spec["design"], gds, spec["top"], root, work,
                     spec=spec)
             row["lvs"] = l
