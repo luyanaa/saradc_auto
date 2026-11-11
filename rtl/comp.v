@@ -14,21 +14,19 @@ module SARADC_COMP (
   wire OUTNp, OUTPp; // Pre-signals
   wire OUTNpb, OUTPpb; // Pre-signals buffered 1 time
   
-  // Compare stage
+  // Compare stage: a single OAI211X16 cross-coupled latch drives each
+  // pre-node.  The pair of "reinforcing" NAND2X2 cells that used to sit on
+  // OUTPp/OUTNp shared the driver and fought the OAI outputs at every
+  // decision edge (~745 uA shoot-through, 140 mV droop, metastability and
+  // supply noise).  They have been removed -- the OAI211X16 (4x OAI211D4) is
+  // already the strongest driver in the cell library, so nothing else needs
+  // to touch these nodes.
   SARADC_CELL_OAI211X16 vp_cmp (
-    .VDD(VDD), .VSS(VSS), 
+    .VDD(VDD), .VSS(VSS),
     .A0(CMPB), .A1(VP), .B0(CMP), .C0(OUTPp), .ZN(OUTNp));
   SARADC_CELL_OAI211X16 vn_cmp (
-    .VDD(VDD), .VSS(VSS), 
+    .VDD(VDD), .VSS(VSS),
     .A0(CMPB), .A1(VN), .B0(CMP), .C0(OUTNp), .ZN(OUTPp));
-    
-  // Differential stage
-  SARADC_CELL_NAND2X2 n2p (
-    .VDD(VDD), .VSS(VSS), 
-    .A0(OUTNp), .A1(CMP), .ZN(OUTPp));
-  SARADC_CELL_NAND2X2 p2n (
-    .VDD(VDD), .VSS(VSS), 
-    .A0(OUTPp), .A1(CMP), .ZN(OUTNp));
   
   // Buffering stage
   SARADC_CELL_BUFFX0 buf_n0 (

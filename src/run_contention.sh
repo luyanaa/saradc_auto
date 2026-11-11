@@ -35,13 +35,21 @@ mkdir -p "$OUT"
 # cornerMOSlv.lib section names are the full corner ids (mos_tt, mos_ff, ...).
 # trtol=7 (the flow setting): trtol=1 collapses the timestep in the
 # contention region -- the sim burns 120 s reaching only ~88 ns.
-sed -e "s|{temp}|$TEMP|g" \
+WITH_NAND="${WITH_NAND:-0}"
+cp "src/${WHICH}_contention_tb.sp" "$OUT/${WHICH}_tb.sp"
+if [ "$WITH_NAND" != "1" ]; then
+  # Bug1 fix: strip the reinforcing NAND pair (the bench mirrors rtl/comp.v,
+  # which no longer contains it).  WITH_NAND=1 restores the original
+  # double-driven nodes to reproduce the contention for comparison.
+  sed -i '/\*NANDBEGIN\*/,/\*NANDEND\*/d' "$OUT/${WHICH}_tb.sp"
+fi
+sed -i -e "s|{temp}|$TEMP|g" \
     -e "s|{corner}|$CORNER|g" \
     -e "s|{PDK}|$PDKDIR|g" \
     -e "s|{CELLS}|$CELLS|g" \
     -e "s|{supply}|$SUPPLY|g" \
     -e "s|trtol=1|trtol=7|" \
-    "src/${WHICH}_contention_tb.sp" > "$OUT/${WHICH}_tb.sp"
+    "$OUT/${WHICH}_tb.sp"
 
 echo "deck: $OUT/${WHICH}_tb.sp  corner=$CORNER temp=$TEMP"
 PDK_ROOT="$PDK_ROOT" PDK="$PDK" \

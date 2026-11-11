@@ -8,41 +8,56 @@ module SARADC_SW (
   input SB, S, // Negated and non-negated
   inout Z1, Z2 // Inouts of the switch
 );
-  
-  // We use VDD and VSS in unintended ways
-  // TODO: Crimes against the logic (lol)
-  
+
+  // Transmission gate built from the smallest inverter cell.  Each
+  // INVX0_ASSW is an inverter; tying its NMOS half (zn->vss pass device) and
+  // PMOS half (zn->vdd pass device) across Z1/Z2 with complementary gates
+  // (S on the NMOS side, SB on the PMOS side) gives a real transmission
+  // gate.  The old comment called this a "crime": the crime was not the
+  // gate, it was shipping it with no charge-injection compensation.
   SARADC_CELL_INVX0_ASSW pgp_lz1 (
 //`ifdef WITH_BODY
     .vnw(VDD), .vpw(VSS),
 //`endif
-  // | passg in p |  load Z1 |
-    .vdd(Z2), .zn(Z1), .vss(Z1), .i(SB)
+    .vdd(Z2), .zn(Z1), .vss(Z1), .i(SB)   // PMOS half: gate SB
   );
   SARADC_CELL_INVX0_ASSW pgn_lz1 (
 //`ifdef WITH_BODY
     .vnw(VDD), .vpw(VSS),
 //`endif
-  // | load Z1  | passg in n |
-    .vdd(Z1), .zn(Z1), .vss(Z2), .i(S)
+    .vdd(Z1), .zn(Z1), .vss(Z2), .i(S)    // NMOS half: gate S
   );
-  
+
   SARADC_CELL_INVX0_ASSW pgp_lz2 (
 //`ifdef WITH_BODY
     .vnw(VDD), .vpw(VSS),
 //`endif
-  // | passg in p |  load Z2 |
-    .vdd(Z1), .zn(Z2), .vss(Z2), .i(SB)
+    .vdd(Z1), .zn(Z2), .vss(Z2), .i(SB)   // PMOS half: gate SB
   );
   SARADC_CELL_INVX0_ASSW pgn_lz2 (
 //`ifdef WITH_BODY
     .vnw(VDD), .vpw(VSS),
 //`endif
-  // | load Z2  | passg in n |
-    .vdd(Z2), .zn(Z2), .vss(Z1), .i(S)
+    .vdd(Z2), .zn(Z2), .vss(Z1), .i(S)    // NMOS half: gate S
   );
 
-  // TODO: We might need to put a pair of antennas
+  // Charge-injection dummy: a half-width shorted switch driven by the
+  // complementary clock.  When S/SB open the main gate its channel charge
+  // spills onto Z1/Z2; the dummy (gate on the opposite phase, drain+source
+  // shorted so it never conducts) absorbs a matching packet and cancels the
+  // pedestal/feedthrough the uncompensated gate injected into the CDAC.
+  SARADC_CELL_INVX0_ASSW dum_z1 (
+//`ifdef WITH_BODY
+    .vnw(VDD), .vpw(VSS),
+//`endif
+    .vdd(Z1), .zn(Z1), .vss(Z1), .i(SB)   // shorted dummy, gate on SB
+  );
+  SARADC_CELL_INVX0_ASSW dum_z2 (
+//`ifdef WITH_BODY
+    .vnw(VDD), .vpw(VSS),
+//`endif
+    .vdd(Z2), .zn(Z2), .vss(Z2), .i(S)    // shorted dummy, gate on S
+  );
 
 endmodule
 

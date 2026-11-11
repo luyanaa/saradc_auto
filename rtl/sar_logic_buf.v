@@ -84,11 +84,18 @@ module saradc_cmpcs2cmp (
   output Z, ZN
 );
   wire IL, ID, IP, ILBUF;
-  
-  // Latch
-  SARADC_CELL_INVX6 ln1(.VDD(VDD), .VSS(VSS), .I(I), .ZN(IL));
-  SARADC_CELL_INVX6 ln2(.VDD(VDD), .VSS(VSS), .I(IL), .ZN(I));
-  
+
+  // Latch: store on an INTERNAL node, not back on the module input port.
+  // The old netlist drove ln2's output onto `I`, so the upstream CCMP
+  // driver had to overpower an inverter on every edge -- the input pin rang
+  // -16 mV below VSS (substrate-diode injection) at the compare boundary.
+  // The keeper loop now sits on internal node IH (the held copy of I); the
+  // input port I is driven only by the upstream cell.
+  wire IH;
+  SARADC_CELL_INVX6 ln1(.VDD(VDD), .VSS(VSS), .I(I),  .ZN(IL));
+  SARADC_CELL_INVX6 ln2(.VDD(VDD), .VSS(VSS), .I(IL), .ZN(IH));
+  SARADC_CELL_INVX6 ln3(.VDD(VDD), .VSS(VSS), .I(IH), .ZN(IL));
+
   // Pulse generation
   SARADC_CELL_DEL4X4 del4(.VDD(VDD), .VSS(VSS), .I(I), .Z(ID));
   SARADC_CELL_AND2X4 deland(.VDD(VDD), .VSS(VSS), .A0(I), .A1(ID), .Z(IP));

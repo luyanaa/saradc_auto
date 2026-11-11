@@ -71,8 +71,13 @@ Xvn2 CMPB VN CMP OUTNp VDD VSS OUTPp sg13g2f_OAI211D4
 Xvn3 CMPB VN CMP OUTNp VDD VSS OUTPp sg13g2f_OAI211D4
 *   reinforcing NAND pair (ND2D2 order: a1 a2 vdd vss zn) -- shares the nodes
 *   n2p: A0=OUTNp A1=CMP -> OUTPp ; p2n: A0=OUTPp A1=CMP -> OUTNp
+*   BUG1 FIX (rtl/comp.v): these two cells have been removed -- the OAI211
+*   latch drives OUTPp/OUTNp alone.  The runner can re-enable them with
+*   WITH_NAND=1 to reproduce the original contention for comparison.
+*NANDBEGIN*
 Xn2p OUTNp CMP VDD VSS OUTPp sg13g2f_ND2D2
 Xp2n OUTPp CMP VDD VSS OUTNp sg13g2f_ND2D2
+*NANDEND*
 *   output buffers (BUFFDx order: i vdd vss z)
 Xbn0 OUTNp VDD VSS OUTNpb sg13g2f_BUFFD0
 Xbn1 OUTNpb VDD VSS OUTN sg13g2f_BUFFD2
