@@ -142,9 +142,14 @@ def topo_cap_mom(dev, p):
     c_ff = float(p.get("c_ff", 2.0))
     # bottom-plate parasitic to substrate, ~10% of plate for a lateral cap
     csub_ff = float(p.get("csub_ff", c_ff * 0.10))
+    # Parasitics land on the two well pins (both driven in every testbench)
+    # so they keep a DC path: bottom plate couples to substrate (VPW), and
+    # the top plate's wiring/nwell fringe couples to VNW.  A private
+    # VSS_SUB node would float and fail the port self-check.
     lines = [".subckt SARADC_CAP_MOM VSH FL VNW VPW",
              f"CMAIN VSH FL {c_ff:g}f",
-             f"CSUB FL VSS_SUB {csub_ff:g}f"]
+             f"CSUB FL VPW {csub_ff:g}f",
+             f"CWNW VSH VNW {csub_ff:g}f"]
     lines.append(".ends")
     meta = {"topology": "cap_mom", "kind": "mom", "c_ff": c_ff,
             "csub_ff": csub_ff, "linear": True,
@@ -250,7 +255,14 @@ def topo_cdac_binary(dev, p):
     The 2^N-th unit is the fixed dummy that sets the reference.
     """
     n = int(p.get("nbits", 8))
-    lines = ["* requires: SARADC_CAP_UNIT, SARADC_SW_TG",
+    # cap backend: "moscap" (default, SARADC_CAP_UNIT) or "mom" (SARADC_CAP_MOM).
+    # The MOM cap is the Bug3 fix -- voltage-independent so the bit weight no
+    # longer tracks the input-dependent MOSCAP C(V).  Same port list so the
+    # array drops in unchanged.
+    cap_kind = str(p.get("cap_kind", "moscap")).lower()
+    cap_cell = "SARADC_CAP_MOM" if cap_kind in ("mom", "vpp_mom", "fringe") \
+        else "SARADC_CAP_UNIT"
+    lines = [f"* requires: {cap_cell}, SARADC_SW_TG",
              ".subckt SARADC_CDAC_BINARY VSH "
              + " ".join(f"B{i}" for i in range(n)) + " "
              + " ".join(f"BB{i}" for i in range(n))
@@ -260,21 +272,22 @@ def topo_cdac_binary(dev, p):
         count = 1 << i
         total += count
         node = f"n{i}"
-        lines.append(f"* bit {i}: {count} unit caps")
+        lines.append(f"* bit {i}: {count} {cap_cell}")
         for k in range(count):
-            lines.append(f"XC{i}_{k} VSH {node} VNW VPW SARADC_CAP_UNIT")
+            lines.append(f"XC{i}_{k} VSH {node} VNW VPW {cap_cell}")
         lines.append(f"XSW{i} B{i} BB{i} VREFH {node} VDD VSS SARADC_SW_TG")
         lines.append(f"XSWN{i} BB{i} B{i} VREFL {node} VDD VSS SARADC_SW_TG")
     # The (2^N)th unit is the fixed dummy: its bottom plate is always driven
     # to VREFL so the switched array always sees the same total capacitance.
     # It is not a conversion bit; it only closes the top-plate charge budget.
-    lines.append(f"XDUM VSH ndum VNW VPW SARADC_CAP_UNIT")
+    lines.append(f"XDUM VSH ndum VNW VPW {cap_cell}")
     lines.append(f"XSWDUMH VSS VDD VREFH ndum VDD VSS SARADC_SW_TG")
     lines.append(f"XSWDUML VDD VSS VREFL ndum VDD VSS SARADC_SW_TG")
     lines.append(".ends")
-    meta = {"topology": "cdac_binary", "nbits": n,
+    meta = {"topology": "cdac_binary", "nbits": n, "cap_kind": cap_kind,
+            "cap_cell": cap_cell,
             "unit_caps": total + 1, "switches_tg": 2 * n + 2,
-            "requires_subckts": ["SARADC_CAP_UNIT", "SARADC_SW_TG"],
+            "requires_subckts": [cap_cell, "SARADC_SW_TG"],
             "ports": (["VSH"] + [f"B{i}" for i in range(n)]
                       + [f"BB{i}" for i in range(n)]
                       + ["VREFH", "VREFL", "VNW", "VPW", "VDD", "VSS"])}

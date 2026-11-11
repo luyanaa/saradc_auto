@@ -164,7 +164,13 @@ def smoke_cdac(manifests, workdir, vdd, nmos, pmos):
     proves the array elaborates and the switch/cap wiring is connected.
     """
     circuit = (read(os.path.join(manifests["cdac_binary"], "circuit.spice")))
-    cap = read(os.path.join(manifests["cap_unit"], "circuit.spice"))
+    # the array references whichever cap cell it was emitted with (Bug3:
+    # SARADC_CAP_MOM for the mom backend); pull the leaf that actually
+    # exists in the manifest set instead of assuming the MOSCAP unit
+    if "cap_mom" in manifests and "SARADC_CAP_MOM" in circuit:
+        cap = read(os.path.join(manifests["cap_mom"], "circuit.spice"))
+    else:
+        cap = read(os.path.join(manifests["cap_unit"], "circuit.spice"))
     sw = read(os.path.join(manifests["switch_tg"], "circuit.spice"))
     # the generated array is sized by --nbits at emission; read the actual
     # port list rather than assume a bit count

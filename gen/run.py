@@ -309,6 +309,8 @@ def cmd_analog(argv):
     ap.add_argument("--pdk", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--nbits", type=int, default=8)
+    ap.add_argument("--cap-kind", default="moscap",
+                    help="cdac unit capacitor backend: moscap (default) or mom")
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args(argv)
 
@@ -316,14 +318,22 @@ def cmd_analog(argv):
     import macro_gen
 
     profile = macro_gen.load_profile(args.pdk)
+    cap_kind = args.cap_kind.lower()
+    # the MOM backend (Bug3) needs the SARADC_CAP_MOM leaf in place of the
+    # MOSCAP cap_unit; emit both only when the array will reference it
+    topos = ["cap_unit"]
+    if cap_kind in ("mom", "vpp_mom", "fringe"):
+        topos.append("cap_mom")
+    topos += ["switch_tg", "switch_bootstrap", "cmp_strongarm", "cdac_binary"]
     rows = []
-    for topo in ("cap_unit", "switch_tg", "switch_bootstrap",
-                 "cmp_strongarm", "cdac_binary"):
+    for topo in topos:
         name = "SARADC_" + topo.upper()
+        params = {"nbits": args.nbits}
+        if topo == "cdac_binary":
+            params["cap_kind"] = cap_kind
         try:
             m = macro_gen.generate(profile, topo, name,
-                                   os.path.join(args.out, topo),
-                                   {"nbits": args.nbits})
+                                   os.path.join(args.out, topo), params)
             rows.append((topo, m["status"], m.get("unit_caps", ""), m.get("n_devices", "")))
         except SystemExit as exc:
             print(exc)
