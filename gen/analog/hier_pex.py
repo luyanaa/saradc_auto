@@ -92,8 +92,10 @@ def main(argv):
     ap.add_argument("--out", default="/tmp/adcgen/hier_pex")
     a = ap.parse_args(argv)
 
-    core = extract_analog_core(a.pdk, a.cdac_gds, a.top,
-                               os.path.abspath(a.root), a.out)
+    from pathlib import Path
+    core = extract_analog_core(a.pdk, Path(os.path.abspath(a.cdac_gds)),
+                               a.top,
+                               Path(os.path.abspath(a.root)), Path(a.out))
     print(f"analog core PEX -> {core['netlist']}")
 
     merged = merge_netlists(core["netlist"], a.digital_spef, a.top_net, a.out)
