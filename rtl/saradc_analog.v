@@ -5,6 +5,7 @@ module SARADC_ANALOG #(
   parameter CAP_KIND = "MOSCAP",
   parameter SW_KIND = "TG",
   parameter CMP_KIND = "LATCH",
+  parameter SEQ_KIND = "SYNC",
   parameter integer NBITS = 8,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -14,11 +15,13 @@ module SARADC_ANALOG #(
   inout VREFH, VREFL, VIN, VIP,
   // Digital to Analog control signals
   input CLK,
+  input CMPSTART,                   // async compare request (SEQ_KIND=ASYNC)
   input VALID,                      // VALID=1 when conversion finished
   input SAMPLE,                     // to S&H circuit
   input [NBITS-1:0] RESULTP,        // 8 bit RESULT output
   input [NBITS-1:0] RESULTN,
   output CMPO,                      // from comparitor
+  output CMPOB,                     // its complement (async controller's RDY)
   output CLKBUF
 );
   wire CPRE, CPREB, CHOLD, CHOLDB, CCMP, CCMPB;
@@ -102,18 +105,23 @@ module SARADC_ANALOG #(
     .Z1(VOUTH), .Z2(VOUTL) // NOTE: Again, the order maybe is important.
   );
   
+  // CMPCLK is what actually runs the comparator's clock pin and the
+  // control-path converter: the system clock in SYNC, the self-timed
+  // CMPSTART request in ASYNC.
+  wire CMPCLK = (SEQ_KIND == "ASYNC") ? CMPSTART : CLK;
+
   // The comparator
   SARADC_COMP #(.CMP_KIND(CMP_KIND)) cmp (
     .VDD(VDD), .VSS(VSS), 
-    .CMP(CCMP), .CMPB(CCMPB), .CK(CLK),
+    .CMP(CCMP), .CMPB(CCMPB), .CK(CMPCLK),
     .VP(VOUTH), .VN(VOUTL),
-    .OUTN(), .OUTP(CMPO) // TODO: OUTN is not used
+    .OUTN(CMPOB), .OUTP(CMPO) // CMPOB is the async controller's RDY leg
   );
   
   // Logic buffers
-  saradc_logic_buf #(.NBITS(NBITS)) buflogic (
+  saradc_logic_buf #(.NBITS(NBITS), .SEQ_KIND(SEQ_KIND)) buflogic (
     .VDD(VDD), .VSS(VSS),
-    .CLK(CLK),
+    .CLK(CMPCLK),
     .RESULTP(RESULTP[NBITS-1:1]), .RESULTN(RESULTN[NBITS-1:1]),
     .SAMPLE(SAMPLE),
     .VALID(VALID),

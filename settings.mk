@@ -22,6 +22,7 @@ $(ROOT_DIR)/rtl/comp.v \
 $(ROOT_DIR)/rtl/saradc_analog.v \
 $(ROOT_DIR)/rtl/sw.v \
 $(ROOT_DIR)/rtl/sar_logic_buf.v \
+$(ROOT_DIR)/rtl/sar_logic_conv_async.v \
 $(ROOT_DIR)/rtl/saradc.v
 
 # "MOSCAP" (taped-out golden) or "MOM" (metal fringe cap, gen/analog)
@@ -30,9 +31,22 @@ CAP_KIND?=MOSCAP
 SW_KIND?=TG
 # "LATCH" (taped-out OAI211 latch) or "STRONGARM" (dynamic comparator)
 CMP_KIND?=LATCH
+# "SYNC" (one bit per CLK, golden) or "ASYNC" (self-timed on comparator RDY)
+SEQ_KIND?=SYNC
 
 DIGTOP=sar_logic_wreset
 SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v
+# SEQ_KIND=ASYNC pulls in the self-timed sequencer and its analog conv path.
+# sar_logic_async is a blackbox to yosys (level-sensitive FSM); its behaviour
+# is verified in rtl/saradc_async_tb.v.
+# sar_logic_async is a blackbox to yosys (cells/sar_logic_async_blackbox.v);
+# the behavioural model rtl/sar_logic_async.v is only read by the testbench.
+SYN_DIG_ASYNC_SRC=$(ROOT_DIR)/rtl/sar_logic_conv_async.v \
+$(ROOT_DIR)/cells/sar_logic_async_blackbox.v
+ifeq ($(SEQ_KIND),ASYNC)
+DIGTOP=sar_logic_async
+SYN_DIG_SRC+=$(SYN_DIG_ASYNC_SRC)
+endif
 
 #######################################################
 # Rules to create the files. 

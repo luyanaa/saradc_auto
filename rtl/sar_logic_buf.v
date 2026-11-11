@@ -2,7 +2,8 @@
 // Pseudo-digital circuit
 
 module saradc_logic_buf #(
-  parameter NBITS = 8
+  parameter NBITS = 8,
+  parameter SEQ_KIND = "SYNC"
 )
 (
   inout VDD, VSS,
@@ -19,18 +20,38 @@ module saradc_logic_buf #(
   wire PRE, HOLD, CMP;
   
   // The logic
-  saradc_logic_conv #(.NBITS(NBITS)) conv
-  (
-    .VDD(VDD), .VSS(VSS),
-    .CLK(CLK),
-    .RESULTP(RESULTP),
-    .RESULTN(RESULTN),
-    .SAMPLE(SAMPLE),
-    .VALID(VALID),
-    .CLKBUF(CLKBUF),
-    .PRE(PRE), .HOLD(HOLD), .CMP(CMP),
-    .CRH(CRH), .CRHB(CRHB), .CRL(CRL), .CRLB(CRLB)
-  );
+  generate
+    if (SEQ_KIND == "ASYNC") begin : async_conv
+      // SEQ_KIND=ASYNC: CLK is the async controller's CMPSTART and
+      // RESULTP/N/SAMPLE/VALID are the self-timed phases.  The converter
+      // builds PRE/HOLD/CMP/CR* from them without a system clock.
+      saradc_logic_conv_async #(.NBITS(NBITS)) conv
+      (
+        .VDD(VDD), .VSS(VSS),
+        .CLK(CLK),
+        .RESULTP(RESULTP),
+        .RESULTN(RESULTN),
+        .SAMPLE(SAMPLE),
+        .VALID(VALID),
+        .CLKBUF(CLKBUF),
+        .PRE(PRE), .HOLD(HOLD), .CMP(CMP),
+        .CRH(CRH), .CRHB(CRHB), .CRL(CRL), .CRLB(CRLB)
+      );
+    end else begin : sync_conv
+      saradc_logic_conv #(.NBITS(NBITS)) conv
+      (
+        .VDD(VDD), .VSS(VSS),
+        .CLK(CLK),
+        .RESULTP(RESULTP),
+        .RESULTN(RESULTN),
+        .SAMPLE(SAMPLE),
+        .VALID(VALID),
+        .CLKBUF(CLKBUF),
+        .PRE(PRE), .HOLD(HOLD), .CMP(CMP),
+        .CRH(CRH), .CRHB(CRHB), .CRL(CRL), .CRLB(CRLB)
+      );
+    end
+  endgenerate
   
   // Latch buffers
   saradc_sh2sbuf lnbuf_cpre(.VDD(VDD), .VSS(VSS), .I(PRE), .Z(CPRE), .ZN(CPREB));

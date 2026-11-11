@@ -181,19 +181,40 @@ other's internals:
 - **No physical leaf** for `SARADC_CMP_STRONGARM` (same status as the
   bootstrapped switch): synthesis works, placement does not.  The script warns.
 
-## Asynchronous SAR sequencer
-- `rtl/sar_logic_async.v` + `rtl/async_sar_tb.v`.  No clock: GO starts a
-  conversion, and each bit advances on the comparator's `RDY`
-  (= NAND(OUTP,OUTN); both outputs high while precharged).  Dropping CMPSTART
-  precharges the comparator, so the handshake is level-based and self-timed.
-- `iverilog -g2012 -o /tmp/async_tb rtl/sar_logic_async.v rtl/async_sar_tb.v`
-  -> `vvp /tmp/async_tb`: 4/4 codes correct at 0.031/0.500/0.750/0.969 FS,
-  conversion 18 ns = 5 bits x (2 ns evaluate + 2 ns precharge) in the model.
-- **Not integrated at the top level.**  `SARADC_ANALOG` still instantiates the
-  synchronous `saradc_logic_buf` path, because the asynchronous controller also
-  has to generate CPRE/CHOLD/CRH/CRL (the sync design does that in
-  `saradc_logic_conv`).  Porting that control generation is the remaining work;
-  the controller itself is verified standalone.
+## Asynchronous SAR sequencer (integrated behind SEQ_KIND)
+- `SARADC` takes `parameter SEQ_KIND = "SYNC"`; `SEQ_KIND="ASYNC"` selects the
+  self-timed `sar_logic_async` controller.  Both sequencers are instantiated
+  and a small mux picks RESULTP/N/SAMPLE/VALID (the async one is a blackbox to
+  yosys, so it adds one cell, not logic).  Flow switch `SEQ_KIND=ASYNC` ->
+  `-DSARADC_SEQ_ASYNC`.
+- `rtl/sar_logic_async.v`: level-sensitive FSM, GO -> SAMPLE -> per-bit
+  evaluate/precharge on the comparator's RDY (= NAND(OUTP,OUTN)).  Emits
+  `CMPSTART` (1=evaluate, 0=precharge), which the top muxes onto the analog's
+  `CMPCLK` in place of the system clock.
+- `rtl/sar_logic_conv_async.v`: the async control path for
+  `saradc_logic_buf`.  Same port contract as `saradc_logic_conv`, so the buf
+  instantiates it unchanged behind the SEQ_KIND generate.  Mapping: PRE=SAMPLE,
+  HOLD=~SAMPLE, CMP=CMPSTART delayed by three DEL4X4 (the LATCH core's compare
+  edge), CLKBUF=CMPSTART (the STRONGARM core's clock), CR* from RESULTP/N via
+  re2cr exactly like the sync path.
+- `SARADC_ANALOG` gained a `CMPSTART` input and `CMPOB` output (the
+  comparator's OUTN leg, previously left unconnected) -- both are SEQ_KIND
+  plumbing, no existing port changes.
+- Verified: `iverilog -DSARADC_SEQ_ASYNC` elaborates, and
+  `rtl/saradc_async_tb.v` runs the full SARADC (both sequencers live) 4/4
+  codes correct, 18 ns conversion in the model.  Standalone
+  `rtl/async_sar_tb.v` also passes.  yosys synthesizes both SEQ_KIND variants
+  (SYNC 3395 / ASYNC 3383 flattened cells).
+- **Caveats.**  (a) `sar_logic_async` is a level-sensitive FSM, so yosys
+  cannot map it to flip-flops.  It is a hard macro to the flow:
+  `cells/sar_logic_async_blackbox.v` is the synthesizable stub and
+  `rtl/sar_logic_async.v` is the behavioural model that simulation uses --
+  same pattern as the comparator.  A real latch-based implementation is
+  future work.  (b) CR* change combinationally on the RESULT write at the
+  same RDY level that drops CMPSTART, so the DAC's charge injection and the
+  next request are separated only by the comparator's own precharge time; a
+  hardened design adds a settle phase.  (c) The analog delays are behavioural,
+  not sign-off timed.
 
 ## Architecture options (behavioural, `gen/verify/sar_arch_options.py`)
 - `switching_activity()`: conventional differential trials cost 2 events/bit
