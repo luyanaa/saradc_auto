@@ -69,17 +69,34 @@ there are no differences in the DAC/comparator region before trusting extraction
   `SARADC_FILL1_NOPOWER` fillers removed, halo 1, no limit, started 2026-10-24 01:00) was still in the
   engine after 16 h with no progress output and was stopped.
 
-## Next task: extract the layout in parts
-Re-do the PnR so the analog core can be extracted on its own, then simulate post-layout:
-1. Back up the taped-out outputs (above).
-2. Produce a layout of just the DAC (cap array + switches + top-plate routing) and the comparator,
-   with the SAR logic and fillers removed, either as a separate hierarchy level in PnR or by clipping
-   the taped-out GDS to that region with its pins labeled. Labeled pins at the cut are what make LVS
-   and the extracted netlist usable.
-3. Extract it with kpex 2.5D (CC mode) and check that the totals are plausible (whole DAC about 10 pF),
-   then simulate with `adc_char.py --netlist` (static first; it shows the weight errors directly) and
-   compare the bit weights with the measured ones.
-4. Add the post-layout results to `sim/report` and to the measurement report in RISCVConsole.
+## Hierarchical PEX (Bug10 -- implemented, replaces the flat-chip plan above)
+The flat whole-chip extraction is abandoned.  Three domains never see each
+other's internals:
+- analog core (CDAC + sw + cmp): `python3 gen/analog/hier_pex.py --pdk ihp
+  --cdac-gds <gds> --top <cell> --root <pdk_root> [--digital-spef <spef>]`.
+  Reuses `closure.pex` (Magic, leaf-aware).  Verified on the ihp 4-bit array:
+  158-line netlist, 24 MOS + 118 parasitic caps, seconds (not the 16 h flat
+  KLayout run).
+- digital core: gate-level SPEF from LibreLane.  `backend/gen_configs.py` has a
+  `sar` arch (`backend/configs/<pdk>/sar.yaml`, clock_port=CLK); run
+  `backend/run.sh ihp-sg13g2 sar` -> `configs/ihp-sg13g2/runs/sar/final/spef/
+  nom/sar_logic_wreset.nom.spef`.
+- merged netlist: `saradc_hier.spice` concatenates the three with a black-box
+  boundary; top-level interconnect extraction is the remaining piece.
+
+## MOM capacitor (Bug3 -- implemented)
+- Schematic: `topo_cap_mom` in `gen/analog/macro_gen.py` (ideal fringe cap +
+  Csub/CWnw parasitics, voltage-independent).  Select with
+  `run.py analog --cap-kind mom`; `cdac_binary` then emits SARADC_CAP_MOM.
+- Layout PCell: `gen/analog/layout_mom_cap.py` (interdigitated metal combs +
+  shield ring, layers from `<pdk>.layers.json` `momcap`).  ihp: DRC clean.
+- Array: `gen/analog/layout_mom_array.py` -- 8-bit binary MOM CDAC, ihp DRC
+  clean (172x62 um).
+- PDK abstraction: `gen/analog/layers.py` + `gen/pdk/<pdk>.layers.json`
+  (layer/datatype map + um DRC constants); the three `layout_*_array.py` read
+  it instead of hardcoding layers.
+- Behavioral evidence (`--cv` in `gen/verify/behavioral_sar.py`): cv=0.8 MOSCAP
+  -> ENOB 2.53 / INL 37 LSB; cv=0 MOM -> ENOB 7.54 / INL 0.2 LSB.
 
 ## Conventions
 - Commit only when the user asks; end commit messages with
