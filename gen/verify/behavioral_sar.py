@@ -47,21 +47,43 @@ def make_weights(nbits, sigma_cu_rel, rng):
     return weights, dummy
 
 
-def convert(x, weights, total, offset_lsb, sigma_lsb, rng):
-    """One SAR conversion. x, offset and sigma are normalised to full scale."""
+def convert(x, weights, total, offset_lsb, sigma_lsb, rng, cv=None):
+    """One SAR conversion. x, offset and sigma are normalised to full scale.
+
+    ``cv`` (Bug3): an optional per-unit-cap voltage coefficient -- the
+    fractional capacitance change when a bit's bottom plate sits at VREFH
+    instead of VSS.  The MOSCAP backend swings up to ~1.8x over bias
+    (cv≈0.8); a MOM cap is flat (cv≈0).  The bit's effective weight then
+    depends on the code being built, which is exactly the input-dependent
+    weight error the taped-out chip showed as -8%..+7% bit-weight spread.
+    """
     code = 0
-    trial_sum = 0.0
+    # At each bit decision the trial plate sits at VREFH, so the cap under
+    # test carries its high-bias value; every bit already kept at VREFH is
+    # also at high bias.  The threshold the comparator resolves is the DAC
+    # level *at that moment* -- decided bits + trial bit at high bias,
+    # undecided bits at low bias -- over the array total biased the same
+    # way.  With cv>0 the weights are no longer code-independent: the same
+    # physical bit contributes differently depending on where the search
+    # has parked the already-decided plates.  That is Bug3: with a MOSCAP
+    # cv of ~0.8 the weight set drifts with the input; with a MOM cap
+    # (cv~0) it does not.
+    set_sum = 0.0   # nominal (low-bias) sum of bits decided at VREFH
     for bit in range(len(weights) - 1, -1, -1):
-        trial = trial_sum + weights[bit]
-        threshold = trial / total + offset_lsb
+        w_hi = weights[bit] * (1.0 + (cv or 0.0))
+        # DAC level during this trial: decided bits + trial bit at VREFH
+        trial_dac = set_sum * (1.0 + (cv or 0.0)) + w_hi
+        # array total biased the same way: decided + trial swollen
+        eff_total = total + (cv or 0.0) * (set_sum + weights[bit])
+        threshold = trial_dac / eff_total + offset_lsb
         sample = x + (rng.gauss(0.0, sigma_lsb) if sigma_lsb else 0.0)
         if sample >= threshold:
             code |= 1 << bit
-            trial_sum = trial
+            set_sum += weights[bit]
     return code
 
 
-def static_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng, points_per_code=64):
+def static_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng, points_per_code=64, cv=None):
     """Fine input ramp, histogram of output codes.
 
     One point per code cannot see DNL: every decision keeps a half-LSB margin
@@ -73,7 +95,7 @@ def static_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng, points_per_co
     total_points = n_codes * points_per_code
     for k in range(total_points):
         x = (k + 0.5) / total_points
-        counts[convert(x, weights, total, offset_lsb, sigma_lsb, rng)] += 1
+        counts[convert(x, weights, total, offset_lsb, sigma_lsb, rng, cv=cv)] += 1
     return counts
 
 
@@ -100,7 +122,7 @@ except ImportError:  # standalone: python3 gen/verify/behavioral_x.py
     from spectral import fft, spectral
 
 def dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng,
-                 n_samples=1024, bin_index=31, ktc_lsb=0.0):
+                 n_samples=1024, bin_index=31, ktc_lsb=0.0, cv=None):
     codes = []
     for m in range(n_samples):
         x = 0.5 + 0.49 * math.sin(2.0 * math.pi * bin_index * m / n_samples)
@@ -109,7 +131,7 @@ def dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng,
             # conversion, not per bit decision); x is normalised to FS so the
             # LSB-sized sigma is divided by 2^N
             x += rng.gauss(0.0, ktc_lsb / float(1 << nbits))
-        codes.append(convert(x, weights, total, offset_lsb, sigma_lsb, rng))
+        codes.append(convert(x, weights, total, offset_lsb, sigma_lsb, rng, cv=cv))
     return codes
 
 
@@ -146,7 +168,7 @@ def _ktc_lsb(spec, nbits, temperature=T_DEFAULT):
 
 
 def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
-        points_per_code=64):
+        points_per_code=64, cv=None):
     nbits = int(spec["resolution"])
     offset_lsb = float(spec.get("comparator_offset_lsb", 0.0)) / (1 << nbits)
     sigma_lsb = float(spec.get("comparator_noise_lsb", 0.0)) / (1 << nbits)
@@ -176,7 +198,7 @@ def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
         total = sum(weights) + dummy
 
         counts = static_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng,
-                             points_per_code)
+                             points_per_code, cv=cv)
         dnl, inl, miss = dnl_inl(counts, points_per_code)
         worst_dnl = max(worst_dnl, max(abs(d) for d in dnl))
         worst_inl = max(worst_inl, max(abs(i) for i in inl))
@@ -185,7 +207,7 @@ def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
         if t == 0:
             samples = dynamic_scan(nbits, weights, total, offset_lsb,
                                    sigma_lsb, rng, n_samples, bin_index,
-                                   ktc_lsb=ktc_lsb)
+                                   ktc_lsb=ktc_lsb, cv=cv)
             dynamic = spectral(samples, nbits)
             if dynamic["sinad_db"] is not None:
                 # SINAD measured on a 0.49-FS tone -> SINAD at full scale
@@ -202,6 +224,7 @@ def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
         "max_inl_lsb": worst_inl,
         "missing_codes": missing,
         "ktc_lsb": ktc_lsb,
+        "cv": cv,
         "sndr_db": dynamic["sndr_db"] if dynamic else None,
         "snr_db": dynamic["snr_db"] if dynamic else None,
         "sinad_db": dynamic["sinad_db"] if dynamic else None,
@@ -234,6 +257,10 @@ def main(argv):
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--samples", type=int, default=1024)
     ap.add_argument("--bin", type=int, default=31)
+    ap.add_argument("--cv", type=float, default=None,
+                    help="unit-cap voltage coefficient: fractional C change at "
+                    "VREFH vs VSS (MOSCAP ~0.8, MOM ~0.0).  Drives the Bug3 "
+                    "input-dependent weight error.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
@@ -247,7 +274,8 @@ def main(argv):
     if sigma is None:
         sigma = 0.0
 
-    result = run(spec, sigma, args.trials, args.seed, args.samples, args.bin)
+    result = run(spec, sigma, args.trials, args.seed, args.samples, args.bin,
+                 cv=args.cv)
     print(json.dumps(result, indent=2) if args.json else human(result))
     return 0
 
