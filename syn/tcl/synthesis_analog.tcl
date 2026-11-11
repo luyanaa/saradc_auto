@@ -61,6 +61,13 @@ if {[info exists ::env(SW_KIND)] && $::env(SW_KIND) eq "BOOT"} {
   puts "WARNING: physical leaf (GDS/LEF) yet -- the netlist will not place."
   verilog_defines -DSARADC_SW_BOOT
 }
+# CMP_KIND=STRONGARM swaps the OAI211 latch for the dynamic comparator.
+if {[info exists ::env(CMP_KIND)] && $::env(CMP_KIND) eq "STRONGARM"} {
+  puts "CMP_KIND=STRONGARM: SARADC_CMP_STRONGARM selected"
+  puts "WARNING: SARADC_CMP_STRONGARM has a SPICE model and RTL abstraction"
+  puts "WARNING: but no physical leaf (GDS/LEF) yet."
+  verilog_defines -DSARADC_CMP_STRONGARM
+}
 
 foreach src $SYN_SRC {
   read_verilog $src

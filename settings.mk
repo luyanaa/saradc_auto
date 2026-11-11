@@ -28,6 +28,8 @@ $(ROOT_DIR)/rtl/saradc.v
 CAP_KIND?=MOSCAP
 # "TG" (inverter transmission gate, golden) or "BOOT" (bootstrapped switch)
 SW_KIND?=TG
+# "LATCH" (taped-out OAI211 latch) or "STRONGARM" (dynamic comparator)
+CMP_KIND?=LATCH
 
 DIGTOP=sar_logic_wreset
 SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v

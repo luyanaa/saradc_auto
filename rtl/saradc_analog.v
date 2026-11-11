@@ -4,6 +4,7 @@
 module SARADC_ANALOG #(
   parameter CAP_KIND = "MOSCAP",
   parameter SW_KIND = "TG",
+  parameter CMP_KIND = "LATCH",
   parameter integer NBITS = 8,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -102,7 +103,7 @@ module SARADC_ANALOG #(
   );
   
   // The comparator
-  SARADC_COMP cmp (
+  SARADC_COMP #(.CMP_KIND(CMP_KIND)) cmp (
     .VDD(VDD), .VSS(VSS), 
     .CMP(CCMP), .CMPB(CCMPB), .CK(CLK),
     .VP(VOUTH), .VN(VOUTL),

@@ -164,6 +164,70 @@ other's internals:
   not sign-off quality and not tape-out ready.  Treat the 2-4x mid-range Ron
   improvement as the deliverable and the flat-Ron goal as open work.
 
+## Comparator (StrongARM behind CMP_KIND)
+- `SARADC_COMP` takes `parameter CMP_KIND = "LATCH"`.  `"STRONGARM"` swaps the
+  OAI211X16 cross-coupled latch for the `SARADC_CMP_STRONGARM` blackbox; the
+  output buffers and polarity (OUTP=1 when VP>VN) are unchanged, and both cores
+  drive the same pre-nodes.  Plumbed through `SARADC_ANALOG`/`SARADC`; the flow
+  switch is `CMP_KIND=STRONGARM` -> `-DSARADC_CMP_STRONGARM`.
+- yosys: default has 2 `SARADC_CELL_OAI211X16`; STRONGARM has
+  1 `SARADC_CMP_STRONGARM` and 0 OAI211X16.  iverilog elaborates both, and both
+  together with SW_KIND/CAP_KIND.
+- Bench evidence (IHP tt, wn=1.0/wp=2.0/l=0.13, `gen/analog/char.py
+  comparator()`): systematic offset -78 uV (bisection over +-40 mV, 9
+  iterations) and clk->out regeneration delay 0.159 ns.  The `.noise` run
+  produced no spectrum (all densities 0), so the integrated-noise field is 0 by
+  artifact, **not** a measurement -- do not quote it.
+- **No physical leaf** for `SARADC_CMP_STRONGARM` (same status as the
+  bootstrapped switch): synthesis works, placement does not.  The script warns.
+
+## Asynchronous SAR sequencer
+- `rtl/sar_logic_async.v` + `rtl/async_sar_tb.v`.  No clock: GO starts a
+  conversion, and each bit advances on the comparator's `RDY`
+  (= NAND(OUTP,OUTN); both outputs high while precharged).  Dropping CMPSTART
+  precharges the comparator, so the handshake is level-based and self-timed.
+- `iverilog -g2012 -o /tmp/async_tb rtl/sar_logic_async.v rtl/async_sar_tb.v`
+  -> `vvp /tmp/async_tb`: 4/4 codes correct at 0.031/0.500/0.750/0.969 FS,
+  conversion 18 ns = 5 bits x (2 ns evaluate + 2 ns precharge) in the model.
+- **Not integrated at the top level.**  `SARADC_ANALOG` still instantiates the
+  synchronous `saradc_logic_buf` path, because the asynchronous controller also
+  has to generate CPRE/CHOLD/CRH/CRL (the sync design does that in
+  `saradc_logic_conv`).  Porting that control generation is the remaining work;
+  the controller itself is verified standalone.
+
+## Architecture options (behavioural, `gen/verify/sar_arch_options.py`)
+- `switching_activity()`: conventional differential trials cost 2 events/bit
+  plus 2 per cleared bit (24 events/conversion at 8 bit); monotonic
+  (Vcm-based) costs exactly 1/bit (8 events).  The trade-off is explicit: the
+  conventional scheme holds the common mode at Vcm (0 walk), monotonic walks it
+  up to N steps off Vcm toward one rail.
+- `bridge_weights()` + best-fit INL: a series-bridge sub-DAC with ratio error
+  eps adds a real INL step at the bridge boundary -- at 8 bit, split_bit=4:
+  eps=0 -> 0.006 LSB, 0.5% -> 0.045 LSB, 1% -> 0.083 LSB.
+- `calibrate()`/`apply_trims()`: per-bit analog trims (switchable trim caps,
+  clipped to +-25%) computed from the measured weights.  On a bridge+1% unit
+  mismatch array the INL falls 0.107 -> 0.006 LSB.
+- `gen/verify/sar_arch_options_test.py` checks all of the above (all PASS).
+  Note the INL here is best-fit and drops the unreachable top code -- the raw
+  cumulative-DNL-from-bin-0 number carries a 1-LSB gain artifact.
+
+## MOM array: common-centroid order + dummy rows
+- `gen/analog/layout_mom_array.py` takes `order=binary|centroid`.  Binary
+  left-aligns every bit row, so bit b sat at a different x and a linear process
+  gradient became a bit-weight error.  `centroid` centres every row on the
+  array's x centroid and adds `dummy_rows=1` full-width dummy rows at the top
+  and bottom; a dummy's FL rail is strapped to the VSH spine, so both plates sit
+  at VSH and it carries no switched charge.
+- ihp DRC 0 for both orders.  Flat Magic PEX (flatten true) of the centroid
+  array: B0..B7 / VSH = 1.940 / 4.099 / 8.424 / 17.083 / 34.401 / 69.037 /
+  138.31 / 276.92 fF (binary: 1.958 / 4.147 / 8.456 / 17.07 / 34.31 / 68.78 /
+  137.72 / 275.60 fF).  Ratios from B1 up are 2.11 / 2.06 / 2.03 / 2.01 / 2.01
+  / 2.00 / 2.00, so centring did not disturb the binary ratio.
+- Real bug found while doing this: dragging the FL rail back to `X0` in the
+  centred layout ran it parallel to the row's (necessarily long) VSH rail over
+  empty metal, and B0 read 5.92 fF instead of ~1.94 fF.  The FL rail must span
+  the active block only; that is why `put_row()` starts it at `x0 - 0.3`.
+
 ## Conventions
 - Commit only when the user asks; end commit messages with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

@@ -46,6 +46,17 @@ import mom_geom  # noqa: E402
 PDK = os.environ.get("pdk", os.environ.get("PDK", "ihp_sg13g2"))
 NBITS = int(os.environ.get("nbits", "8"))
 C_FF = float(os.environ.get("c_ff", "2.0"))
+# ORDER=centroid centres every bit row on the array's x centroid (the binary
+# order left-aligns the rows, so bit b sat at a different x for every b and a
+# linear process gradient became a bit-weight error).  It also draws
+# DUMMY_ROWS full-width dummy rows at the top and bottom; both plates of a
+# dummy are tied to VSH, so it adds matching edge capacitance and no switched
+# charge.
+ORDER = os.environ.get("order", "binary")
+if ORDER not in ("binary", "centroid"):
+    raise SystemExit(f"order must be binary or centroid, got {ORDER!r}")
+DUMMY_ROWS = int(os.environ.get("dummy_rows",
+                                "1" if ORDER == "centroid" else "0"))
 OUT = os.environ.get("out", os.environ.get("OUT",
                      "/tmp/adcgen/flow/mom_array8.gds"))
 
@@ -97,46 +108,79 @@ def main():
     via = ly.layer(*L.layer("VIA1"))
 
     top = ly.create_cell(f"SARADC_MOM_ARRAY_{NBITS}B")
-    max_right = (1 << (NBITS - 1)) * CAP_PITCH
+    max_leaves = 1 << (NBITS - 1)
+    max_right = max_leaves * CAP_PITCH
 
     # left VSH spine, clear of the row rails by > fg
     spine_x0, spine_x1 = X0 - 0.9, X0 - 0.6
 
-    for bit in range(NBITS):
-        ncap = 1 << bit
-        dy = PAD + bit * ROW_PITCH
-        row_right = X0 + ncap * CAP_PITCH
+    def put_row(dy, ncap, x0, bit=None, dummy=False):
+        """Place ncap leaves at x0; return (active_left, active_right)."""
         for k in range(ncap):
             top.insert(pya.CellInstArray(
                 cap, pya.Trans(pya.Vector(
-                    int(round((X0 + k * CAP_PITCH) * 1000)),
+                    int(round((x0 + k * CAP_PITCH) * 1000)),
                     int(round(dy * 1000))))))
-        # FL (bottom plate) rail: overlaps every leaf's FL bus and carries
-        # the bit's pin.  Starts right of the VSH spine.
+        right = x0 + ncap * CAP_PITCH
+        # FL (bottom plate) rail.  Active rows get the bit's pin; a dummy row's
+        # FL rail is tied to the VSH spine below (both plates at VSH) so it
+        # carries no switched charge.
         # No rail vias: the rail's M1 and M2 are joined through the leaf's
-        # own via row (rail M2 -> leaf bus M2 -> leaf via -> leaf bus M1 ->
-        # rail M1).  Adding rail vias on top of the leaf vias makes
+        # own via row.  Adding rail vias on top of the leaf vias makes
         # partially-overlapping 0.19 cuts, which violates V1.a (min=max).
-        box(top, m2, X0 - 0.3, dy, row_right + 0.3, dy + BUS_H)
-        box(top, m1, X0 - 0.3, dy, row_right + 0.3, dy + BUS_H)
-        pin(top, f"B{bit}", row_right + 0.15, dy + BUS_H / 2, pinm2)
-        pin(top, f"B{bit}", row_right + 0.15, dy + BUS_H / 2, pinm1)
-        # VSH (top plate) rail: overlaps every leaf's VSH bus, ties into
-        # the left spine.
+        fin = right + 0.3 if not dummy else right
+        # The FL rail spans the active block only.  In centroid order the
+        # block is centred, so dragging the rail back to X0 would run it
+        # parallel to the row's (necessarily long) VSH rail over empty
+        # space -- that is pure B<bit>-to-VSH parasitic and it swamped the
+        # LSB (B0 read 5.92 fF instead of ~2 fF).
+        box(top, m2, x0 - 0.3, dy, fin, dy + BUS_H)
+        box(top, m1, x0 - 0.3, dy, fin, dy + BUS_H)
+        if bit is not None:
+            pin(top, f"B{bit}", right + 0.15, dy + BUS_H / 2, pinm2)
+            pin(top, f"B{bit}", right + 0.15, dy + BUS_H / 2, pinm1)
+        # VSH (top plate) rail: overlaps every leaf's VSH bus, ties into the
+        # left spine.
         vy0 = dy + LEAF_H - BUS_H
-        box(top, m2, spine_x0, vy0, row_right + 0.3, vy0 + BUS_H)
-        box(top, m1, spine_x0, vy0, row_right + 0.3, vy0 + BUS_H)
+        box(top, m2, spine_x0, vy0, right + 0.3, vy0 + BUS_H)
+        box(top, m1, spine_x0, vy0, right + 0.3, vy0 + BUS_H)
+        return x0, right
+
+    for bit in range(NBITS):
+        ncap = 1 << bit
+        dy = PAD + (DUMMY_ROWS + bit) * ROW_PITCH
+        if ORDER == "centroid":
+            x0 = X0 + (max_leaves - ncap) / 2.0 * CAP_PITCH
+        else:
+            x0 = X0
+        put_row(dy, ncap, x0, bit=bit)
+
+    # Dummy rows: full-width, above and below the binary rows.
+    dummy_ys = []
+    for j in range(DUMMY_ROWS):
+        dummy_ys.append(PAD + j * ROW_PITCH)
+        dummy_ys.append(PAD + (DUMMY_ROWS + NBITS + j) * ROW_PITCH)
+    for dy in dummy_ys:
+        put_row(dy, max_leaves, X0, dummy=True)
+        # short the dummy's two plates: drop a strap from its FL rail into
+        # the VSH spine at the left end, outside the leaf field
+        vy0 = dy + LEAF_H - BUS_H
+        # reach x = X0 - 0.3 so the strap actually lands on the dummy row's
+        # FL rail (which starts at X0 - 0.3); the VSH spine is at -0.9..-0.6.
+        box(top, m2, spine_x0, dy, X0 - 0.3, vy0 + BUS_H)
+        box(top, m1, spine_x0, dy, X0 - 0.3, vy0 + BUS_H)
 
     # VSH spine down the left edge, plus its pin
-    top_y = PAD + (NBITS - 1) * ROW_PITCH + LEAF_H
-    box(top, m2, spine_x0, PAD, spine_x1, top_y)
-    box(top, m1, spine_x0, PAD, spine_x1, top_y)
-    pin(top, "VSH", (spine_x0 + spine_x1) / 2, PAD + 0.3, pinm2)
-    pin(top, "VSH", (spine_x0 + spine_x1) / 2, PAD + 0.3, pinm1)
+    y_lo = PAD
+    y_hi = PAD + (DUMMY_ROWS + NBITS - 1) * ROW_PITCH + LEAF_H
+    box(top, m2, spine_x0, y_lo, spine_x1, y_hi)
+    box(top, m1, spine_x0, y_lo, spine_x1, y_hi)
+    pin(top, "VSH", (spine_x0 + spine_x1) / 2, y_lo + 0.3, pinm2)
+    pin(top, "VSH", (spine_x0 + spine_x1) / 2, y_lo + 0.3, pinm1)
 
     # guard ring around the whole bank, stitched M1/M2, tied to VSS
-    rx0, ry0 = spine_x0 - PAD, PAD - PAD
-    rx1, ry1 = X0 + max_right + PAD, top_y + PAD
+    rx0, ry0 = spine_x0 - PAD, 0.0
+    rx1, ry1 = X0 + max_right + PAD, PAD + (DUMMY_ROWS + NBITS) * ROW_PITCH
     for layer in (m1, m2):
         box(top, layer, rx0, ry0, rx1, ry0 + RING_W)
         box(top, layer, rx0, ry1 - RING_W, rx1, ry1)
@@ -162,8 +206,8 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
     ly.write(OUT)
     bb = top.bbox()
-    print(f"wrote {OUT}  cell={top.name}  nbits={NBITS} "
-          f"leaf={LEAF_W:.2f}x{LEAF_H:.2f}  "
+    print(f"wrote {OUT}  cell={top.name}  nbits={NBITS} order={ORDER} "
+          f"dummy_rows={DUMMY_ROWS}  leaf={LEAF_W:.2f}x{LEAF_H:.2f}  "
           f"bbox={bb.width() * ly.dbu:.2f}x{bb.height() * ly.dbu:.2f} um")
 
 

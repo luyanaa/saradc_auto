@@ -11,6 +11,7 @@ export ROOT_DIR
 export TECH
 export CAP_KIND
 export SW_KIND
+export CMP_KIND
 
 SYN_ANA_NET=$(SYN_DIR)/outputs/$(TOP)_net.v
 SYN_NET=$(SYN_DIR)/outputs/$(DIGTOP)_net.v

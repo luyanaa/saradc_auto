@@ -40,6 +40,13 @@ module SARADC_SW_BOOT(VDD, VSS, SB, S, Z1, Z2);
 endmodule
 
 (* blackbox *)
+module SARADC_CMP_STRONGARM(VDD, VSS, CLK, INP, INN, OUTP, OUTN);
+    inout VDD, VSS;
+    input CLK, INP, INN;
+    output OUTP, OUTN;
+endmodule
+
+(* blackbox *)
 module SARADC_FILLTIE2(vdd, vss);
     inout vdd, vss;
 endmodule
