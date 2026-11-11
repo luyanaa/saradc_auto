@@ -94,23 +94,23 @@ def main():
     ly = pya.Layout()
     ly.dbu = 0.001
     cap = load_leaf(ly, cap_gds, "SARADC_CAP_MOM")
-    tg = load_leaf(ly, tg_gds, None) if False else None
-    # the TG leaf is optional at this stage: the array's job is the cap
-    # field + per-bit straps; the switch leaf drops in at assembly.
-    try:
-        tg = load_leaf(ly, tg_gds, "SARADC_SW_TG_IHP") if os.path.isfile(tg_gds) \
-            else None
-    except SystemExit:
-        tg = None
+    # each bit row gets one transmission gate that switches the bottom
+    # plate between VREFH and VREFL; the leaf is required now (assembly
+    # no longer defers it)
+    tg = load_leaf(ly, tg_gds, "SARADC_SW_TG_IHP")
 
     top = ly.create_cell(f"SARADC_MOM_ARRAY_{NBITS}B")
     m1, m2 = ly.layer(*M1), ly.layer(*M2)
-    pinm2 = ly.layer(*PIN_M2)
+    pinm1, pinm2 = ly.layer(*PIN_M1), ly.layer(*PIN_M2)
 
     # VSH rail down the left edge on m2
     vsh_x = (-0.85, -0.60)
-    # VREFH / VREFL rails down the right edge on m2
-    refh_x = None  # set after widest row
+
+    # TG leaf geometry (from layout_ihp_tg.py): the Z2 crown pad faces the
+    # cap field at local x -0.50..-0.17, y 2.74..2.95; the Z1 riser is at
+    # local x ~0.98..1.14 on m1 (right side); VDD/VSS taps near x1.6.
+    TG_Z2 = (-0.50, -0.17, 2.74, 2.95)   # bottom-plate side (faces caps)
+    TG_Z1 = (0.98, 1.14, 0.0, 2.95)      # reference side (m1 riser)
 
     for bit in range(NBITS):
         ncap = 1 << bit
@@ -121,12 +121,24 @@ def main():
                 cap, pya.Trans(pya.Vector(
                     int(round(k * CAP_PITCH * 1000)),
                     int(round(dy * 1000))))))
-        # per-bit FL strap (bottom plates of this row) on m2, run to the
-        # bit's TG landing pad at the row's right end
-        strap_y = dy + LEAF_H + 0.6
-        box(top, m2, 0.0, strap_y, row_right + TG_GAP + 0.4,
-            strap_y + FG + 0.2)
-        pin(top, f"B{bit}", row_right + TG_GAP + 0.2, strap_y + 0.1, pinm2)
+        # place this row's TG just right of the cap field, vertically
+        # centred so its Z2 crown (local y ~2.8) meets the row's FL strap
+        tg_x = row_right + TG_GAP
+        tg_dy = dy + LEAF_H - 2.95        # align Z2 crown with the strap
+        top.insert(pya.CellInstArray(
+            tg, pya.Trans(pya.Vector(
+                int(round(tg_x * 1000)), int(round(tg_dy * 1000))))))
+        # per-bit FL strap (bottom plates) on m2, run under the row and
+        # land on the TG's Z2 crown pad (bottom-plate terminal)
+        strap_y = dy + LEAF_H + 0.3
+        box(top, m2, 0.0, strap_y, tg_x + TG_Z2[0], strap_y + FG + 0.2)
+        # riser up to the Z2 crown (which is at tg local y 2.74..2.95)
+        box(top, m2, tg_x + TG_Z2[0], tg_dy + TG_Z2[2],
+            tg_x + TG_Z2[1], strap_y + FG + 0.2)
+        pin(top, f"B{bit}", tg_x + TG_Z2[0] - 0.1, strap_y + 0.1, pinm2)
+        # the TG's Z1 riser is the reference terminal: label it per bit.
+        # The reference driver (VREFH/VREFL selection) lands here.
+        pin(top, f"REF{bit}", tg_x + TG_Z1[0] + 0.05, tg_dy + 1.30, pinm1)
 
     # common VSH bus.  Each leaf's top comb bus is already VSH inside the
     # cell at the row's top edge.  A single continuous m2 rail laid over the
