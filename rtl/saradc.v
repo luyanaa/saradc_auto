@@ -13,6 +13,11 @@ module SARADC #(
 `else
   parameter CAP_KIND = "MOSCAP",
 `endif
+`ifdef SARADC_SW_BOOT
+  parameter SW_KIND = "BOOT",
+`else
+  parameter SW_KIND = "TG",
+`endif
   parameter integer NBITS = 5,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -33,6 +38,7 @@ module SARADC #(
 
   SARADC_ANALOG #(
     .CAP_KIND(CAP_KIND),
+    .SW_KIND(SW_KIND),
     .NBITS(NBITS),
     .NPW(NPW),
     .NPH(NPH)

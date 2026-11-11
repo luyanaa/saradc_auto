@@ -26,6 +26,8 @@ $(ROOT_DIR)/rtl/saradc.v
 
 # "MOSCAP" (taped-out golden) or "MOM" (metal fringe cap, gen/analog)
 CAP_KIND?=MOSCAP
+# "TG" (inverter transmission gate, golden) or "BOOT" (bootstrapped switch)
+SW_KIND?=TG
 
 DIGTOP=sar_logic_wreset
 SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v

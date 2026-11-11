@@ -53,6 +53,14 @@ if {[info exists ::env(CAP_KIND)] && $::env(CAP_KIND) eq "MOM"} {
   puts "CAP_KIND=MOM: SARADC_CAP_MOM selected"
   verilog_defines -DSARADC_CAP_MOM
 }
+# SW_KIND=BOOT flips the CDAC pass devices from the inverter TG to the
+# bootstrapped switch leaf.
+if {[info exists ::env(SW_KIND)] && $::env(SW_KIND) eq "BOOT"} {
+  puts "SW_KIND=BOOT: SARADC_SW_BOOT selected"
+  puts "WARNING: SW_KIND=BOOT has a SPICE model and RTL abstraction but no"
+  puts "WARNING: physical leaf (GDS/LEF) yet -- the netlist will not place."
+  verilog_defines -DSARADC_SW_BOOT
+}
 
 foreach src $SYN_SRC {
   read_verilog $src

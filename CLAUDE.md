@@ -125,6 +125,45 @@ other's internals:
   they join through the leaf's via row; adding rail vias on the leaf vias
   forms 0.24-wide partial-overlap cuts that violate V1.a.
 
+## Bootstrap switch (implemented at RTL + SPICE, no physical leaf yet)
+- **RTL select:** `SARADC`/`SARADC_ANALOG`/`SARADC_LSB_CDAC`/`SARADC_MSB_CDAC`/
+  `SARADC_CDAC_UNIT` take `parameter SW_KIND = "TG"`.  `SW_KIND="BOOT"`
+  instantiates the `SARADC_SW_BOOT` blackbox for all three CDAC switch groups
+  (VI->VSH, VSH->VOUTH, VSH->VOUTL).  The six-port contract (VDD, VSS, SB, S,
+  Z1, Z2) is identical to `SARADC_SW`, so no CDAC wiring or port changes; S/SB
+  are the two clock phases a bootstrap needs.  `cells/SARADC_CELL_INVX0_ASSW`
+  is still emitted for the OR paths / SARADC_SW_MULT (VOUTH-VOUTL merge).
+- Flow switch: `SW_KIND=BOOT` in `settings.mk` / env -> `synthesis_analog.tcl`
+  does `verilog_defines -DSARADC_SW_BOOT`, which flips `SARADC`'s default.
+  yosys: default 4271 cells / 2178 ASSW; BOOT 3119 cells / 192
+  `SARADC_SW_BOOT` / 1026 ASSW.  iverilog elaborates all three variants
+  (TG, BOOT, BOOT+MOM).
+- **No physical leaf.**  `SARADC_SW_BOOT` is a blackbox with no GDS/LEF: the
+  netlist will not place.  `synthesis_analog.tcl` prints a WARNING for this.
+  Default stays "TG" until a leaf exists.
+- Bench model: `topo_switch_bootstrap` in `gen/analog/macro_gen.py`
+  (8 devices, `.subckt SARADC_SW_BOOT CLK VIN VOUT VDD VSS`), characterized by
+  `char.switch_boot`.  Same bench for both kinds (IHP tt, l=0.13 um, 50 uA DC
+  load, 20 ns transient, sampled at 12 ns), Ron = (Vin-Vout)/Iload:
+  ```
+  Vin     TG wn2/wp1   BOOT wn2/wp1 cb500   BOOT wn5/wp2 cb500
+  0.18       449            395                 152
+  0.39       849            425                 165
+  0.60      2395            564                 227
+  0.81      4755           1116                 484
+  1.02      3059           3328                2120
+  overdrive   --     1.11..0.75 V         1.09..0.65 V
+  ```
+  The bootstrap removes the mid-rail |Vgs| collapse (2-4x lower Ron at 0.4-0.8 V)
+  but does NOT flatten Ron: at high Vin the gate only reaches ~VDD+0.4 V because
+  the bottom-plate device (MX, gate=CLK) saturates at VDD-Vth, and the residual
+  rise is NMOS body effect.  Full-rail VDD+Vin would need 3.3 V devices and an
+  isolated-well strategy; not attempted.  A DC conductance probe of the same TG
+  (gates rail-to-rail, no load) peaks at 27.4 kOhm at mid-rail.
+- Verdict: the abstraction and the simulation evidence are real, but this is
+  not sign-off quality and not tape-out ready.  Treat the 2-4x mid-range Ron
+  improvement as the deliverable and the flat-Ron goal as open work.
+
 ## Conventions
 - Commit only when the user asks; end commit messages with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

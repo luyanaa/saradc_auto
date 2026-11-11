@@ -3,6 +3,7 @@
 
 module SARADC_LSB_CDAC # (
   parameter CAP_KIND = "MOSCAP",
+  parameter SW_KIND = "TG",
   parameter integer NBITS = 7,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -22,6 +23,7 @@ module SARADC_LSB_CDAC # (
     for(i = 0; i < NBITS; i = i + 1) begin : cdac_bit
       SARADC_CDAC_UNIT #(
         .CAP_KIND(CAP_KIND),
+        .SW_KIND(SW_KIND),
         .NSW_VI(1 << i), // 1, 2, 4, 8...
         .NSW_VOUTH(1 << i), // 1, 2, 4, 8...
         .NSW_VOUTL(1 << i), // 1, 2, 4, 8...
@@ -44,6 +46,7 @@ module SARADC_LSB_CDAC # (
   // The dummy CDAC
   SARADC_CDAC_UNIT #(
     .CAP_KIND(CAP_KIND),
+    .SW_KIND(SW_KIND),
     .NSW_VI(1),
     .NSW_VOUTH(1),
     .NSW_VOUTL(1),
@@ -64,6 +67,7 @@ endmodule
 
 module SARADC_MSB_CDAC # (
   parameter CAP_KIND = "MOSCAP",
+  parameter SW_KIND = "TG",
   parameter integer NBITS = 7,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -83,6 +87,7 @@ module SARADC_MSB_CDAC # (
   // This CDAC unit is connected backwards
   SARADC_CDAC_UNIT #(
     .CAP_KIND(CAP_KIND),
+    .SW_KIND(SW_KIND),
     .NSW_VI(1 << NBITS),
     .NSW_VOUTH(1 << NBITS),
     .NSW_VOUTL(1 << NBITS),

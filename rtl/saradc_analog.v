@@ -3,6 +3,7 @@
 (* keep_hierarchy = "yes" *)
 module SARADC_ANALOG #(
   parameter CAP_KIND = "MOSCAP",
+  parameter SW_KIND = "TG",
   parameter integer NBITS = 8,
   parameter integer NPW = 3, // Number of caps in X for each CDAC unit
   parameter integer NPH = 2 // Number of caps in Y for each CDAC unit
@@ -55,7 +56,7 @@ module SARADC_ANALOG #(
   (* dont_touch = "yes" *)
   wire MSB_H_VSH, MSB_H_FL, MSB_L_VSH, MSB_L_FL;
   SARADC_MSB_CDAC #(
-    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .SW_KIND(SW_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) msb_cdac_h (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB), .CHOLD(CHOLD), .CHOLDB(CHOLDB),
@@ -63,7 +64,7 @@ module SARADC_ANALOG #(
     .VSH(MSB_H_VSH), .FL(MSB_H_FL)
   );
   SARADC_MSB_CDAC #(
-    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .SW_KIND(SW_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) msb_cdac_l (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB), .CHOLD(CHOLD), .CHOLDB(CHOLDB),
@@ -75,7 +76,7 @@ module SARADC_ANALOG #(
   (* dont_touch = "yes" *)
   wire [NBITS-1:0] LSB_H_VSH, LSB_H_FL, LSB_L_VSH, LSB_L_FL;
   SARADC_LSB_CDAC #(
-    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .SW_KIND(SW_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) lsb_cdac_h (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB),
@@ -84,7 +85,7 @@ module SARADC_ANALOG #(
     .VSH(LSB_H_VSH), .FL(LSB_H_FL)
   );
   SARADC_LSB_CDAC #(
-    .CAP_KIND(CAP_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
+    .CAP_KIND(CAP_KIND), .SW_KIND(SW_KIND), .NBITS(NBITS-1), .NPW(NPW), .NPH(NPH)
   ) lsb_cdac_l (
     .VDD(VDD), .VSS(VSS), 
     .CPRE(CPRE), .CPREB(CPREB),

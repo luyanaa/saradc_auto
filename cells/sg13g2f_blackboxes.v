@@ -34,6 +34,12 @@ module SARADC_CAP_MOM(VSH, FL, VSS);
 endmodule
 
 (* blackbox *)
+module SARADC_SW_BOOT(VDD, VSS, SB, S, Z1, Z2);
+    inout VDD, VSS, Z1, Z2;
+    input SB, S;
+endmodule
+
+(* blackbox *)
 module SARADC_FILLTIE2(vdd, vss);
     inout vdd, vss;
 endmodule
