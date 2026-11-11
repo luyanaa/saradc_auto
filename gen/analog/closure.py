@@ -6,7 +6,10 @@ layouts; the other seven are behavioural-only (see GAPS.md L3).  This driver
 therefore audits the physical models that exist:
 
     leaves   cap_unit, switch_tg
-    array    4-bit binary slice (array4b)
+    array    4-bit binary slice (array4b)   ihp / gf180 / ics55 only
+
+sky130 currently closes only cap_unit + switch_tg through layout_check.py;
+it has no array4b model, so the "all" run covers 3 array4b slices, not 4.
 
 and runs the full proof chain on each, regenerating the GDS from its layout
 script first so the result is reproducible and not a stale artifact:
@@ -486,9 +489,15 @@ def main() -> int:
     (Path(args.out) / "closure.json").write_text(
         json.dumps(all_rows, indent=2) + "\n")
 
+    # A leaf that has an LVS reference must prove `ok is True`: a None
+    # (no-reference or unrun) result cannot silently pass just because DRC
+    # and PEX happened to succeed.
     hard = [r_ for r_ in all_rows
             if r_.get("error") or not r_.get("drc", {}).get("ok", False)
-            or r_.get("lvs", {}).get("ok") is False
+            or (r_["design"] in {"cap_unit", "switch_tg"}
+                and r_.get("lvs", {}).get("ok") is not True)
+            or (r_["design"] == "array4b"
+                and r_.get("lvs", {}).get("ok") is False)
             or not r_.get("pex", {}).get("ok", False)]
     if hard:
         print("\nFAILED: " + ", ".join(f"{r_['pdk']}/{r_['design']}"

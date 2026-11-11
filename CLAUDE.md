@@ -7,12 +7,27 @@ gates (`SARADC_CELL_INVX16_ASCAP`, 720 instances), switches `SARADC_CELL_INVX0_A
 (parent repo `asicone_sg13g2`, which has this repo as a submodule). The chip is fabricated and measured.
 
 ## Environment
-- Always `source ~/init_openlane.sh` first (OpenLane tools in /opt/ext/OpenLane, the venv
-  `~/Documents/SymbioticEDA/venv` with kpex, `PDK_ROOT=/opt/ext/OpenPDKs`, `PDK=ihp-sg13g2`).
-- PDK: IHP-Open-PDK, branch dev, commit 7c783c7c (2026-10-21). The ngspice OSDI models and the Xyce
-  plugins under the PDK were rebuilt locally from that commit (git-ignored there).
-- Simulators: ngspice-47 (preferred; PSP103 via OSDI, KLU) and Xyce (about 3x slower with KLU,
-  about 10x with its default iterative solver; same results). The machine has 32 cores and 60 GB.
+- `~/init_openlane.sh`, `/opt/ext/OpenLane` and `/opt/ext/OpenPDKs` are gone -- the
+  environment migrated to a nix profile + ciel. Do NOT source init scripts; the tools
+  are already on PATH: `librelane` (~/.nix-profile, pin 3.0.17), `magic` 8.3.685,
+  `netgen`, `klayout` (use `$KLAYOUT_BIN`, 0.30.7 -- see below).
+- PDK lives under ciel now: `PDK_ROOT=$HOME/.ciel/ciel/ihp-sg13/versions/89d42ee6d2fd9b50b86a1aada6fee6673c3e6008`,
+  `PDK=ihp-sg13g2`. The ngspice decks are under `$PDK_ROOT/$PDK/libs.tech/ngspice/`.
+- ngspice: version is now 44.2 (not 47). To run the IHP Verilog-A models you MUST
+  export `SPICEINIT=$PDK_ROOT/$PDK/libs.tech/ngspice/.spiceinit` plus `PDK_ROOT`/`PDK`
+  -- `pre_osdi` inside `.control` is too late. `src/run_contention.sh` wraps this.
+  Note: this ciel tree's `libs.tech/ngspice/osdi/` is missing `cap_cmomi.osdi` and
+  `cap_cmomf.osdi`; the .spiceinit prints load errors for them. Harmless for the MOS
+  benches here, but anything that instantiates MOM caps needs those OSDIs fixed.
+- Gotcha: `~/.spiceinit` globally pre-loads the IHP OSDIs. When running a NON-IHP
+  deck (sky130 flattened, ics55 BSIM4) it will complain about missing `psp103.osdi`
+  paths -- run with `HOME=/tmp/opencode/emptyhome ngspice ...` to isolate.
+- KLayout: `/usr/bin/klayout` is 0.30.0 (too old for the PDK decks). Use the nix
+  store 0.30.7 build; `gen/analog/klayout_bin.py` resolves it and `run.py` already
+  exports the right binary via `$KLAYOUT_BIN`.
+- Simulators: ngspice-44.2 (PSP103 via OSDI, KLU). Xyce: the flattened decks in
+  `gen/outputs/deck/` (sky130_tt.spice, ics55_tt.spice) run in ngspice directly;
+  ics55's deck is native BSIM4 `.model` cards, no OSDI needed.
 - Flow: `make -C syn all`, `make -C pnr all`, `make -C signoff all` (see README.md).
   `settings.mk` holds the die size (X, Y) and the source list.
 

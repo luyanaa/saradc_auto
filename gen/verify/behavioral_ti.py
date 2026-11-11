@@ -33,61 +33,23 @@ import random
 # fft / spectral measurement
 # --------------------------------------------------------------------------
 
-def fft(values):
-    n = len(values)
-    a = [complex(v) for v in values]
-    j = 0
-    for i in range(1, n):
-        bit = n >> 1
-        while j & bit:
-            j ^= bit
-            bit >>= 1
-        j ^= bit
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    length = 2
-    while length <= n:
-        ang = -2.0 * math.pi / length
-        wl = complex(math.cos(ang), math.sin(ang))
-        half = length >> 1
-        for start in range(0, n, length):
-            w = 1.0 + 0.0j
-            for k in range(start, start + half):
-                u = a[k]
-                v = a[k + half] * w
-                a[k] = u + v
-                a[k + half] = u - v
-                w *= wl
-        length <<= 1
-    return a
+try:
+    from spectral import fft, spectral
+except ImportError:  # standalone: python3 gen/verify/behavioral_x.py
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from spectral import fft, spectral
 
 
 def spectral_ti(codes, nbits, channels):
-    """SNDR/SFDR on the fs-rate stream, excluding DC and the signal lobe."""
-    n = len(codes)
-    code_fs = float(1 << nbits)
-    mean = sum(codes) / n
-    spectrum = fft([(c - mean) / code_fs for c in codes])
-    power = [abs(v) ** 2 for v in spectrum[: n // 2]]
-    fundamental = max(range(1, n // 2), key=lambda k: power[k])
-    sig_bins = {fundamental + d for d in (-1, 0, 1) if 1 <= fundamental + d < n // 2}
-    sig = sum(power[k] for k in sig_bins)
-    # worst non-signal bin is the SFDR spur; harmonics are just other spurs
-    spur_bin = max((k for k in range(1, n // 2) if k not in sig_bins),
-                   key=lambda k: power[k], default=1)
-    spur = power[spur_bin]
-    noise = sum(power[k] for k in range(1, n // 2)
-                if k not in sig_bins and k != spur_bin)
-    if sig <= 0 or noise <= 0:
-        return {"sndr_db": None, "enob": None, "fundamental_bin": fundamental,
-                "sfdr_db": None, "spur_bin": spur_bin, "spur_dbc": None}
-    sndr = 10.0 * math.log10(sig / noise)
-    sfdr = 10.0 * math.log10(sig / spur) if spur > 0 else None
-    return {"sndr_db": sndr, "enob": (sndr - 1.76) / 6.02,
-            "fundamental_bin": fundamental, "sfdr_db": sfdr,
-            "spur_bin": spur_bin, "spur_fs": spur_bin / float(n),
-            "spur_dbc": -sfdr if sfdr is not None else None}
+    """SINAD/SFDR on the interleaved fs-rate stream (shared metric core).
 
+    The interleaving spurs do not sit on integer harmonics, so the shared
+    `spectral` still isolates the worst spur correctly; `channels` stays in
+    the signature for call-site clarity.
+    """
+    code_fs = float(1 << nbits)
+    return spectral([c / code_fs for c in codes], nbits)
 
 # --------------------------------------------------------------------------
 # driver

@@ -125,60 +125,12 @@ def dnl_inl(counts, points_per_code, interior_only=True):
 # fft / dynamic performance (same bench as behavioral_sar)
 # --------------------------------------------------------------------------
 
-def fft(values):
-    n = len(values)
-    a = [complex(v) for v in values]
-    j = 0
-    for i in range(1, n):
-        bit = n >> 1
-        while j & bit:
-            j ^= bit
-            bit >>= 1
-        j ^= bit
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    length = 2
-    while length <= n:
-        ang = -2.0 * math.pi / length
-        wl = complex(math.cos(ang), math.sin(ang))
-        half = length >> 1
-        for start in range(0, n, length):
-            w = 1.0 + 0.0j
-            for k in range(start, start + half):
-                u = a[k]
-                v = a[k + half] * w
-                a[k] = u + v
-                a[k + half] = u - v
-                w *= wl
-        length <<= 1
-    return a
-
-
-def spectral(samples, nbits):
-    n = len(samples)
-    code_fs = float(1 << nbits)
-    mean = sum(samples) / n
-    spectrum = fft([(s - mean) / code_fs for s in samples])
-    power = [abs(v) ** 2 for v in spectrum[: n // 2]]
-    fundamental = max(range(1, n // 2), key=lambda k: power[k])
-    sig_bins = {fundamental + d for d in (-1, 0, 1) if 1 <= fundamental + d < n // 2}
-    harm_bins = set()
-    for h in range(2, 6):
-        for d in (-1, 0, 1):
-            hb = fundamental * h + d
-            if 1 <= hb < n // 2 and hb not in sig_bins:
-                harm_bins.add(hb)
-    sig = sum(power[k] for k in sig_bins)
-    harm = sum(power[k] for k in harm_bins)
-    excluded = sig_bins | harm_bins | {0}
-    noise = sum(power[k] for k in range(1, n // 2) if k not in excluded)
-    if sig <= 0 or noise <= 0:
-        return {"sndr_db": None, "enob": None, "fundamental_bin": fundamental}
-    sndr = 10.0 * math.log10(sig / noise)
-    return {"sndr_db": sndr, "enob": (sndr - 1.76) / 6.02,
-            "fundamental_bin": fundamental,
-            "harmonic_power_db": 10.0 * math.log10(harm / sig) if harm > 0 else None}
-
+try:
+    from spectral import fft, spectral
+except ImportError:  # standalone: python3 gen/verify/behavioral_x.py
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from spectral import fft, spectral
 
 # --------------------------------------------------------------------------
 # driver
@@ -244,8 +196,11 @@ def run(spec, sigma_cu_rel=0.0, trials=10, seed=1, n_samples=1024,
         "missing_codes": missing,
         "bubble_rate": bubbles / float(trials * ((1 << nbits) * points_per_code)),
         "sndr_db": dynamic["sndr_db"] if dynamic else None,
+        "snr_db": dynamic["snr_db"] if dynamic else None,
+        "sinad_db": dynamic["sinad_db"] if dynamic else None,
+        "thd_db": dynamic["thd_db"] if dynamic else None,
         "enob": dynamic["enob"] if dynamic else None,
-        "sfdr_dbc": dynamic["harmonic_power_db"] if dynamic else None,
+        "sfdr_dbc": dynamic["sfdr_dbc"] if dynamic else None,
     }
 
 
@@ -262,7 +217,7 @@ def human(r):
         f"{r['dnl_predicted_3sigma_lsb']:.3f} LSB vs target "
         f"{r['dnl_target_lsb']:.2f}",
         f"  dynamic  SNDR={r['sndr_db']:.2f} dB  "
-        f"ENOB={r['enob']:.2f} bit  worst harmonic={r['sfdr_dbc']:.1f} dBc",
+        f"ENOB={r['enob']:.2f} bit  SFDR={r['sfdr_dbc']:.1f} dBc  THD={r['thd_db']:.1f} dB  SNR={r['snr_db']:.1f} dB",
     ])
 
 

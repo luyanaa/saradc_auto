@@ -341,7 +341,25 @@ def cmd_analog(argv):
         print()
         for r in results:
             print(f"{'PASS' if r['pass'] else 'FAIL'}  {r['topology']:16s} {r['check']}")
-        return 0 if all(r["pass"] for r in results) else 1
+
+        # generated Verilog must parse: a broken black-box is worse than none
+        import shutil as _sh, subprocess as _sp
+        iv = _sh.which("iverilog")
+        v_ok = True
+        if iv:
+            print()
+            for t, *_ in rows:
+                mv = os.path.join(args.out, t, "macro.v")
+                proc = _sp.run([iv, "-t", "null", mv],
+                               capture_output=True, text=True)
+                ok = proc.returncode == 0
+                v_ok &= ok
+                print(f"{'PASS' if ok else 'FAIL'}  {t:16s} iverilog parse")
+                if not ok:
+                    print(proc.stderr.strip()[:400])
+        else:
+            print("\n(iverilog not on PATH; macro.v parse skipped)")
+        return 0 if all(r["pass"] for r in results) and v_ok else 1
     return 0
 
 

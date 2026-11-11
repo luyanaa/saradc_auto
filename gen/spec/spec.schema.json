@@ -47,7 +47,9 @@
       "type": "object",
       "required": ["backend"],
       "properties": {
-        "backend": { "enum": ["transmission_gate", "bootstrapped"] }
+        "backend": { "enum": ["transmission_gate", "bootstrapped"] },
+        "width_um": { "type": "number", "exclusiveMinimum": 0,
+                      "description": "switch device width multiplier relative to the profile's characterised point; scales Ron and off-cap along the profile's width_study curve" }
       }
     },
     "logic": {

@@ -27,7 +27,14 @@ import sys
 # --------------------------------------------------------------------------
 
 def make_weights(nbits, sigma_cu_rel, rng):
-    """Binary weights in unit-capacitor units, with mismatch on each cell."""
+    """Binary weights in unit-capacitor units, with mismatch on each cell.
+
+    Returns ``(weights, dummy)`` where ``weights`` are the nbits switched
+    capacitors and ``dummy`` is the fixed terminating unit.  The dummy is a
+    real capacitor too: it shares the array's common-mode error and its own
+    unit mismatch, and it is part of the physical charge budget, so it is drawn
+    here rather than assumed ideal.
+    """
     weights = []
     for bit in range(nbits):
         nominal = 1 << bit
@@ -35,7 +42,9 @@ def make_weights(nbits, sigma_cu_rel, rng):
         # quadrature, so the cell's relative sigma is sigma_unit/sqrt(2^bit)
         sigma = sigma_cu_rel / math.sqrt(nominal)
         weights.append(nominal * (1.0 + rng.gauss(0.0, sigma)))
-    return weights
+    # the terminating dummy is a single unit capacitor
+    dummy = 1.0 * (1.0 + rng.gauss(0.0, sigma_cu_rel))
+    return weights, dummy
 
 
 def convert(x, weights, total, offset_lsb, sigma_lsb, rng):
@@ -83,77 +92,23 @@ def dnl_inl(counts, points_per_code):
 # fft / dynamic performance
 # --------------------------------------------------------------------------
 
-def fft(values):
-    n = len(values)
-    a = [complex(v) for v in values]
-    j = 0
-    for i in range(1, n):
-        bit = n >> 1
-        while j & bit:
-            j ^= bit
-            bit >>= 1
-        j ^= bit
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    length = 2
-    while length <= n:
-        ang = -2.0 * math.pi / length
-        wl = complex(math.cos(ang), math.sin(ang))
-        half = length >> 1
-        for start in range(0, n, length):
-            w = 1.0 + 0.0j
-            for k in range(start, start + half):
-                u = a[k]
-                v = a[k + half] * w
-                a[k] = u + v
-                a[k + half] = u - v
-                w *= wl
-        length <<= 1
-    return a
+try:
+    from spectral import fft, spectral
+except ImportError:  # standalone: python3 gen/verify/behavioral_x.py
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from spectral import fft, spectral
 
-
-def spectral(samples, nbits):
-    """Coherent-sine SNDR/ENOB. samples must have a power-of-two length."""
-    n = len(samples)
-    mean = sum(samples) / n
-    spectrum = fft([s - mean for s in samples])
-    power = [abs(v) ** 2 for v in spectrum[: n // 2]]
-
-    fundamental = max(range(1, n // 2), key=lambda k: power[k])
-    sig_bins = set()
-    for d in (-1, 0, 1):
-        if 1 <= fundamental + d < n // 2:
-            sig_bins.add(fundamental + d)
-
-    # first five harmonics (skip DC and the fundamental cluster)
-    harm_bins = set()
-    for h in range(2, 6):
-        hb = fundamental * h
-        for d in (-1, 0, 1):
-            if 1 <= hb + d < n // 2 and (hb + d) not in sig_bins:
-                harm_bins.add(hb + d)
-
-    sig = sum(power[k] for k in sig_bins)
-    harm = sum(power[k] for k in harm_bins)
-    excluded = sig_bins | harm_bins | {0}
-    noise = sum(power[k] for k in range(1, n // 2) if k not in excluded)
-
-    if sig <= 0 or noise <= 0:
-        return {"sndr_db": None, "enob": None, "fundamental_bin": fundamental}
-
-    sndr = 10.0 * math.log10(sig / noise)
-    return {
-        "sndr_db": sndr,
-        "enob": (sndr - 1.76) / 6.02,
-        "fundamental_bin": fundamental,
-        "harmonic_power_db": 10.0 * math.log10(harm / sig) if harm > 0 else None,
-    }
-
-
-def dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng, n_samples=1024, bin_index=31):
+def dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng,
+                 n_samples=1024, bin_index=31, ktc_lsb=0.0):
     codes = []
     for m in range(n_samples):
         x = 0.5 + 0.49 * math.sin(2.0 * math.pi * bin_index * m / n_samples)
+        if ktc_lsb:
+            # per-sample input-referred kT/C sampling noise (one draw each
+            # conversion, not per bit decision); x is normalised to FS so the
+            # LSB-sized sigma is divided by 2^N
+            x += rng.gauss(0.0, ktc_lsb / float(1 << nbits))
         codes.append(convert(x, weights, total, offset_lsb, sigma_lsb, rng))
     return codes
 
@@ -162,11 +117,47 @@ def dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng, n_samples=10
 # driver
 # --------------------------------------------------------------------------
 
+K_B = 1.380649e-23
+T_DEFAULT = 300.0
+
+
+def _ktc_lsb(spec, nbits, temperature=T_DEFAULT):
+    """Input-referred kT/C sampling noise in LSB.
+
+    feasibility.py sizes C_tot against 12 kT 2^(2N)/vfs^2 so that the
+    Nyquist-band SNR meets the ideal quantisation limit; the per-sample
+    input-referred variance for a C_tot array sampled once is
+        sigma_v^2 = kT / C_tot
+    normalised to LSB = vfs/2^N.  The behavioral model needs the same term or
+    its dynamic SINAD claims noise the real sampling switch cannot deliver.
+    """
+    vfs = float(spec.get("input", {}).get("vfs", spec.get("vdd", 1.0)))
+    cu_ff = spec.get("cdac", {}).get("cu_ff", "auto")
+    # the array total: 2^N unit caps.  When cu_ff is "auto" the spec does not
+    # pin it, so fall back to the feasibility floor (the binding constraint).
+    if isinstance(cu_ff, (int, float)):
+        c_tot_f = (1 << nbits) * float(cu_ff) * 1e-15
+    else:
+        c_tot_f = 12.0 * K_B * temperature * (2.0 ** (2 * nbits)) / (vfs ** 2)
+    if c_tot_f <= 0:
+        return 0.0
+    lsb_v = vfs / (1 << nbits)
+    return math.sqrt(K_B * temperature / c_tot_f) / lsb_v
+
+
 def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
         points_per_code=64):
     nbits = int(spec["resolution"])
     offset_lsb = float(spec.get("comparator_offset_lsb", 0.0)) / (1 << nbits)
     sigma_lsb = float(spec.get("comparator_noise_lsb", 0.0)) / (1 << nbits)
+    # dynamic scan uses a 0.49-FS sine; ENOB is quoted vs full scale, so SINAD
+    # is corrected by the amplitude shortfall (a ~0.03 bit pessimism otherwise)
+    amp_corr_db = -20.0 * math.log10(0.49 / 0.5)
+    # kT/C sampling noise the real array adds on top of quantisation.  It is a
+    # per-SAMPLE offset on the input value, not per-comparison noise -- folding
+    # it into sigma_lsb would wrongly inject it into every one of the N bit
+    # decisions (which cannot be undone).  Apply it to the input sine instead.
+    ktc_lsb = _ktc_lsb(spec, nbits)
 
     worst_dnl = 0.0
     worst_inl = 0.0
@@ -175,10 +166,14 @@ def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
 
     for t in range(trials):
         rng = random.Random(seed + t)
-        weights = make_weights(nbits, sigma_cu_rel, rng)
-        # the array holds 2^N units; only 2^N-1 are switched, one is the
-        # fixed dummy, so the reference is the nominal 2^N, not sum(weights)
-        total = float(1 << nbits)
+        weights, dummy = make_weights(nbits, sigma_cu_rel, rng)
+        # the charge budget is the ACTUAL array total -- every switched unit
+        # plus the drawn dummy.  Using the nominal 2^N denominator here was a
+        # real bug: a common-scale cap error (e.g. MOSCAP C(V) density drift,
+        # which moves every unit together by ~1.8x over bias) then showed up
+        # as a false INL/missing-code defect.  Scaling all units by the same
+        # factor is physically transparent; only the drawn sum is.
+        total = sum(weights) + dummy
 
         counts = static_scan(nbits, weights, total, offset_lsb, sigma_lsb, rng,
                              points_per_code)
@@ -188,20 +183,31 @@ def run(spec, sigma_cu_rel, trials=10, seed=1, n_samples=1024, bin_index=31,
         missing = max(missing, miss)
 
         if t == 0:
-            samples = dynamic_scan(nbits, weights, total, offset_lsb, sigma_lsb,
-                                   rng, n_samples, bin_index)
+            samples = dynamic_scan(nbits, weights, total, offset_lsb,
+                                   sigma_lsb, rng, n_samples, bin_index,
+                                   ktc_lsb=ktc_lsb)
             dynamic = spectral(samples, nbits)
+            if dynamic["sinad_db"] is not None:
+                # SINAD measured on a 0.49-FS tone -> SINAD at full scale
+                dynamic["sinad_db"] += amp_corr_db
+                dynamic["sndr_db"] = dynamic["sinad_db"]
+                dynamic["enob"] = (dynamic["sinad_db"] - 1.76) / 6.02
 
     return {
+        "arch": "sar",
         "nbits": nbits,
         "sigma_cu_rel": sigma_cu_rel,
         "trials": trials,
         "max_dnl_lsb": worst_dnl,
         "max_inl_lsb": worst_inl,
         "missing_codes": missing,
+        "ktc_lsb": ktc_lsb,
         "sndr_db": dynamic["sndr_db"] if dynamic else None,
+        "snr_db": dynamic["snr_db"] if dynamic else None,
+        "sinad_db": dynamic["sinad_db"] if dynamic else None,
+        "thd_db": dynamic["thd_db"] if dynamic else None,
         "enob": dynamic["enob"] if dynamic else None,
-        "sfdr_dbc": dynamic["harmonic_power_db"] if dynamic else None,
+        "sfdr_dbc": dynamic["sfdr_dbc"] if dynamic else None,
     }
 
 
@@ -212,7 +218,7 @@ def human(r):
         f"  static   max|DNL|={r['max_dnl_lsb']:.3f} LSB  "
         f"max|INL|={r['max_inl_lsb']:.3f} LSB  missing codes={r['missing_codes']}",
         f"  dynamic  SNDR={r['sndr_db']:.2f} dB  "
-        f"ENOB={r['enob']:.2f} bit  worst harmonic={r['sfdr_dbc']:.1f} dBc",
+        f"ENOB={r['enob']:.2f} bit  SFDR={r['sfdr_dbc']:.1f} dBc  THD={r['thd_db']:.1f} dB  SNR={r['snr_db']:.1f} dB",
     ])
 
 

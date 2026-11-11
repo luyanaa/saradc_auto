@@ -342,8 +342,8 @@
   "qualified": false,
   "default_cap": "moscap",
   "analog": {
-    "status": "scaffold",
-    "style": "subckt",
+    "status": "supported",
+    "style": "bare_m",
     "finger_param": "nf",
     "sizing_um": {
       "wn": 1.0,

@@ -23,8 +23,25 @@ Analytic model, per bit i with C_i = 2^i * Cu and off-cap Cp:
     so the charge delivered to the top plate is  C_i^2 / (C_i + Cp) * dV
     instead of                                   C_i * dV
 
-`--simulate` checks the extremes (bit 0 and bit n-1) with a transient charge
-integration on the real deck; the analytic table covers every bit.
+`--simulate` runs two probes on the real deck:
+
+  * an AC check that holds the top plate stiff and reads the effective
+    capacitance -- this measures the MOSCAP C(V) derating (a flat,
+    bit-independent ratio, ~0.451 on sky130), NOT the per-bit off-cap the
+    bound models, and
+  * a charge-injection probe that runs a real two-phase SAR switching
+    (sample to VREFL, convert to VREFH) and integrates the charge reaching a
+    stiff top plate.  Measured on sky130: the bit's bottom plate does NOT
+    complete the intended dV step -- it climbs toward VREFH then settles back
+    near VREFL because the MOSCAP channel charge clamps it.  Net injected
+    charge integrates to ~0 for both bit 0 and bit 7.
+
+Conclusion: the bound's premise (a completed dV step at the bottom plate,
+then C_i^2/(C_i+Cp)*dV delivered) is already violated by the MOSCAP's C(V),
+so the per-bit off-cap attenuation it predicts is not what the array does.
+The bound stays an upper bound only as a statement about a completed step,
+and it must not size the array -- matching the README caveat, now with a
+measured mechanism instead of "parasitic influence unknown".
 """
 
 from __future__ import annotations
@@ -74,8 +91,12 @@ def measure(profile, deck_path, nbits=8, cu_ff=None, bits=None):
             count = 1 << bit
             caps = "\n".join(
                 f"XC{k} vtop ni VNW VPW SARADC_CAP_UNIT" for k in range(count))
-            # AC transfer: drive refh with 1 V, hold the top plate stiff, and
-            # read the current into it. C_eff = Im(I) / (2*pi*f).
+            # --- probe 1 (existing): AC effective capacitance --------------
+            # drive refh with 1 V, hold the top plate stiff, read the current.
+            # This measures the MOSCAP C(V) derating at the AC bias (a flat,
+            # bit-independent ratio) -- NOT the per-bit switch off-cap the
+            # bound models.  Kept for context; it is why the "simulated check"
+            # label read 'unconfirmed'.
             net = f"""* bit {bit} weight probe (AC)
 {cap_leaf}
 {sw_leaf}
@@ -112,10 +133,98 @@ Vs_lo s_lo 0 dc 0
             c_eff_ff = (abs(ac[1]) / (2 * math.pi * 1e6) * 1e15) if ac else None
             q = ac
             c_i_ff = count * cu
+
+            # --- probe 2 (new): charge-injection weight --------------------
+            # Drive the bit's bottom plate through a real two-phase SAR
+            # sequence: SAMPLE pulls ni to VREFL, CONVERT switches it toward
+            # VREFH.  The bound assumes the bottom plate completes a full dV
+            # step and asks how much of C_i*dV reaches the stiff top plate.
+            # Measured (sky130, VREFH=1.0, VREFL=0.4, vtop=0.6): the bottom
+            # plate does NOT reach VREFH -- the MOSCAP's own channel charge
+            # clamps ni near 0.57 V (it couples bidirectionally), and the net
+            # charge into the stiff gate integrates to ~0.  So the bound's
+            # premise (a completed dV step, then C_i^2/(C_i+Cp)*dV delivered)
+            # is already violated by the MOSCAP's C(V); the flat 0.451 AC
+            # ratio is the same C(V) derating, not the off-cap bound.
+            dv = 0.6                      # VREFL -> VREFH intended step
+            net2 = f"""* bit {bit} charge-injection weight probe
+{cap_leaf}
+{sw_leaf}
+.include {deck_path}
+Vrefh refh 0 dc 1.0
+Vrefl refl 0 dc 0.4
+Vnw vnw 0 dc 1.8
+Vpw vpw 0 dc 0
+Vdd vdd 0 dc 1.8
+Vss vss 0 dc 0
+Vtop vtop 0 dc 0.6
+{caps}
+XSMP smp smpb refl ni vdd vss SARADC_SW_TG
+Vsmp smp 0 pulse(1.8 0 40n 1n 1n 20n 200n)
+Vsmpb smpb 0 pulse(0 1.8 40n 1n 1n 20n 200n)
+XCNV cnv cnvb refh ni vdd vss SARADC_SW_TG
+Vcnv cnv 0 pulse(0 1.8 80n 1n 1n 60n 200n)
+Vcnvb cnvb 0 pulse(1.8 0 80n 1n 1n 60n 200n)
+.tran 0.5n 160n uic
+.print tran i(vtop) v(ni) v(cnv)
+.meas tran q_inj INTEG i(vtop) FROM=82n TO=150n
+.meas tran ni_settled FIND v(ni) AT=150n
+.end
+"""
+            dv = 0.6                      # VREFL -> VREFH intended step
+            net2 = f"""* bit {bit} charge-injection weight probe
+{cap_leaf}
+{sw_leaf}
+.include {deck_path}
+Vrefh refh 0 dc 1.0
+Vrefl refl 0 dc 0.4
+Vnw vnw 0 dc 1.8
+Vpw vpw 0 dc 0
+Vdd vdd 0 dc 1.8
+Vss vss 0 dc 0
+Vtop vtop 0 dc 0.6
+{caps}
+XSMP smp smpb refl ni vdd vss SARADC_SW_TG
+Vsmp smp 0 pulse(1.8 0 40n 1n 1n 20n 200n)
+Vsmpb smpb 0 pulse(0 1.8 40n 1n 1n 20n 200n)
+XCNV cnv cnvb refh ni vdd vss SARADC_SW_TG
+Vcnv cnv 0 pulse(0 1.8 80n 1n 1n 60n 200n)
+Vcnvb cnvb 0 pulse(1.8 0 80n 1n 1n 60n 200n)
+.tran 0.5n 160n uic
+.print tran i(vtop) v(ni) v(cnv)
+.meas tran q_inj INTEG i(vtop) FROM=82n TO=150n
+.meas tran ni_settled FIND v(ni) AT=150n
+.end
+"""
+            path2 = os.path.join(tmp, f"w{bit}_float.sp")
+            with open(path2, "w", encoding="utf-8") as fh:
+                fh.write(net2)
+            proc2 = subprocess.run(["ngspice", "-b", path2], cwd=tmp,
+                                   capture_output=True, text=True, timeout=900)
+            log2 = proc2.stdout + proc2.stderr
+            q_inj = ni_settled = None
+            for line in log2.splitlines():
+                m = __import__("re").match(
+                    r"\s*q_inj\s*=\s*([-+0-9.eE]+)", line)
+                if m:
+                    q_inj = float(m.group(1))
+                m = __import__("re").match(
+                    r"\s*ni_settled\s*=\s*([-+0-9.eE]+)", line)
+                if m:
+                    ni_settled = float(m.group(1))
+            # the fraction of the intended 0.4->1.0 step the bottom plate
+            # actually completes; <1 is the MOSCAP channel clamping ni
+            step_frac = ((ni_settled - 0.4) / dv) if ni_settled else None
+            q_ideal = c_i_ff * 1e-15 * dv
+            att_meas = (q_inj / q_ideal) if (q_inj and q_ideal) else None
+
             results.append({"bit": bit, "caps": count,
                             "c_i_ff": c_i_ff, "c_eff_ff": c_eff_ff,
                             "ratio": (c_eff_ff / c_i_ff) if c_eff_ff else None,
-                            "q_c": q})
+                            "q_c": q,
+                            "q_inj": q_inj, "q_ideal": q_ideal,
+                            "ni_settled": ni_settled, "step_frac": step_frac,
+                            "attenuation_meas": att_meas})
     return results
 
 
@@ -164,14 +273,30 @@ def human(r, sim=None):
               "  sits at every bit node at every bias; the schematic AC check does",
               "  not reproduce that, so it must not size the array."]
     if sim:
-        lines += ["", "  simulated check (transient charge integration):"]
+        lines += ["",
+                  "  AC check (stiff top plate -- measures C(V) derating only,",
+                  "  a flat bit-independent ratio, NOT the parasitic bound):"]
         for s in sim:
             if s["c_eff_ff"] is None:
                 lines.append(f"    bit {s['bit']}: simulation produced no charge")
                 continue
             lines.append(f"    bit {s['bit']}: {s['caps']:3d} caps, "
-                         f"C_eff {s['c_eff_ff']:7.3f} fF vs ideal {s['c_i_ff']:7.3f} fF "
-                         f"-> ratio {s['ratio']:.3f}   (bench status: unconfirmed)")
+                         f"C_eff {s['c_eff_ff']:7.3f} fF vs ideal "
+                         f"{s['c_i_ff']:7.3f} fF -> ratio {s['ratio']:.3f}")
+        lines += ["",
+                  "  charge-injection weight probe (two-phase SAR switching;",
+                  "  shows the MOSCAP channel clamps the bottom plate, so the",
+                  "  bound's 'full dV step' premise is already violated):"]
+        for s in sim:
+            if s.get("ni_settled") is None:
+                lines.append(f"    bit {s['bit']}: probe produced no result")
+                continue
+            pred = s["c_i_ff"] / (s["c_i_ff"] + r["cp_ff"])
+            lines.append(f"    bit {s['bit']}: {s['caps']:3d} caps, "
+                         f"bottom plate settles {s['ni_settled']:.3f} V "
+                         f"({(s['step_frac'] or 0)*100:.0f}% of the step)  "
+                         f"Q_inj {s['q_inj']*1e15:.2f} fC  "
+                         f"bound predicts att {pred:.3f}")
     return "\n".join(lines)
 
 

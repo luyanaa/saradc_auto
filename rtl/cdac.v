@@ -41,7 +41,7 @@ module SARADC_LSB_CDAC # (
     .NSW_VI(1),
     .NSW_VOUTH(1),
     .NSW_VOUTL(1),
-    .NSW_CAP(6)
+    .NSW_CAP(NPW*NPH)
   ) cdac_unit (
     .VDD(VDD), .VSS(VSS), 
     .CRI(CPRE), .CRIB(CPREB),

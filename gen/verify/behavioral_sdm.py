@@ -67,33 +67,12 @@ def modulate(xs, order=2, gain_db=60.0):
 # fft and in-band measurement
 # --------------------------------------------------------------------------
 
-def fft(values):
-    n = len(values)
-    a = [complex(v) for v in values]
-    j = 0
-    for i in range(1, n):
-        bit = n >> 1
-        while j & bit:
-            j ^= bit
-            bit >>= 1
-        j ^= bit
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    length = 2
-    while length <= n:
-        ang = -2.0 * math.pi / length
-        wl = complex(math.cos(ang), math.sin(ang))
-        half = length >> 1
-        for start in range(0, n, length):
-            w = 1.0 + 0.0j
-            for k in range(start, start + half):
-                u = a[k]
-                v = a[k + half] * w
-                a[k] = u + v
-                a[k + half] = u - v
-                w *= wl
-        length <<= 1
-    return a
+try:
+    from spectral import fft, spectral
+except ImportError:  # standalone: python3 gen/verify/behavioral_x.py
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from spectral import fft, spectral
 
 
 def inband_sndr(bits, osr, bin_index):

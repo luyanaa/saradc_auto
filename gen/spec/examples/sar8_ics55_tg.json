@@ -15,7 +15,7 @@
     "sampling": "bottom_plate"
   },
   "comparator": { "backend": "strongarm", "trim_bits": 3 },
-  "sampling": { "backend": "transmission_gate" },
+  "sampling": { "backend": "transmission_gate", "width_um": 4.0 },
   "logic": { "timing": "sync", "osr": 1, "averaging": 1 },
   "calibration": { "offset": false, "gain": false, "weights": false },
   "physical": {

@@ -43,7 +43,9 @@ def bind_devices(circuit, nmos, pmos):
     out = []
     for line in circuit.splitlines():
         tok = line.split()
-        if tok and tok[0].startswith("X") and len(tok) >= 6 and tok[5] in models:
+        if tok and tok[0][0] in "XM" and len(tok) >= 6 and tok[5] in models:
+            # X (vendor subckt call) and bare-M both put the model name last
+            # after the four device nodes; both become a level-1 M on nch/pch
             name, d, g, s, b, model = tok[:6]
             keep = [t for t in tok[6:] if t.startswith(("w=", "l=", "m="))]
             out.append(" ".join([f"M{name[1:]}", d, g, s, b, models[model]] + keep))
@@ -151,7 +153,63 @@ Xc inp inn clk outp outn vdd 0 SARADC_CMP_STRONGARM
             "models": "level1-smoke"}
 
 
-SMOKES = {"cap_unit": smoke_cap, "switch_tg": smoke_tg, "cmp_strongarm": smoke_cmp}
+def smoke_cdac(manifests, workdir, vdd, nmos, pmos):
+    """The generated CDAC was previously only iverilog-parsed, never simulated.
+
+    Level-1 connectivity check: instantiate the binary array for nbits=4,
+    hold the top plate floating onto a hold cap, and flip bit 0's bottom
+    plates from VREFL to VREFH.  A correctly wired array delivers charge so
+    the top plate moves; a broken port order or a dead dummy leaves it flat.
+    This does NOT measure the weight (the level-1 MOSCAP has no C(V)); it
+    proves the array elaborates and the switch/cap wiring is connected.
+    """
+    circuit = (read(os.path.join(manifests["cdac_binary"], "circuit.spice")))
+    cap = read(os.path.join(manifests["cap_unit"], "circuit.spice"))
+    sw = read(os.path.join(manifests["switch_tg"], "circuit.spice"))
+    # the generated array is sized by --nbits at emission; read the actual
+    # port list rather than assume a bit count
+    import re
+    head = next(l for l in circuit.splitlines() if l.startswith(".subckt"))
+    decl = head.split()[2:]
+    nbits = len([p for p in decl if re.fullmatch(r"B\d+", p)])
+    ports = " ".join([f"b{i}" for i in range(nbits)]
+                     + [f"bb{i}" for i in range(nbits)])
+    drives = "\n".join(
+        f"VB{i} b{i} 0 pulse(0 {vdd} 10n 1n 1n 40n 100n)\n"
+        f"VBB{i} bb{i} 0 pulse({vdd} 0 10n 1n 1n 40n 100n)"
+        for i in range(nbits))
+    net = (MODELS + bind_devices(cap + "\n" + sw + "\n" + circuit,
+                                 nmos, pmos) + f"""
+Vrefh vrefh 0 dc {vdd}
+Vrefl vrefl 0 dc 0
+Vnw vnw 0 dc {vdd}
+Vpw vpw 0 dc 0
+Vdd vdd 0 dc {vdd}
+Vss vss 0 dc 0
+{drives}
+Chold vsh 0 1p
+.ic v(vsh)={vdd/2}
+Xcdac vsh {ports} vrefh vrefl vnw vpw vdd 0 SARADC_CDAC_BINARY
+.tran 1n 80n uic
+.print tran v(vsh)
+.end
+""")
+    rc, log = run_ngspice(net, workdir)
+    rows = parse_table(log)
+    ok, detail = False, None
+    if len(rows) > 1:
+        vsh0, vsh1 = rows[0][-1], rows[-1][-1]
+        # charge conservation: a connected array moves the top plate off its
+        # initial value when a bit switches
+        ok = abs(vsh1 - vsh0) > 1e-4
+        detail = {"vsh_initial": vsh0, "vsh_final": vsh1}
+    return {"topology": "cdac_binary", "pass": bool(ok),
+            "check": "bit switch moves the floating top plate", "detail": detail,
+            "models": "level1-smoke"}
+
+
+SMOKES = {"cap_unit": smoke_cap, "switch_tg": smoke_tg,
+          "cmp_strongarm": smoke_cmp, "cdac_binary": smoke_cdac}
 
 
 def run(manifests, vdd=1.8, only=None, devices=None):

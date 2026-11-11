@@ -19,7 +19,7 @@ PDK's leaves without rewiring:
   switch_tg         S SB Z1 Z2 VDD VSS
   switch_bootstrap  CLK VIN VOUT VDD VSS
   cmp_strongarm     INP INN CLK OUTP OUTN VDD VSS
-  cdac_binary       VSH B0..B<n-1> BB0..BB<n-1> VREFH VREFL VNW VPW
+  cdac_binary       VSH B0..B<n-1> BB0..BB<n-1> VREFH VREFL VNW VPW VDD VSS
 """
 
 from __future__ import annotations
@@ -70,6 +70,7 @@ def device_binding(profile):
         "nmos": dev["nmos"],
         "pmos": dev["pmos"],
         "finger": analog.get("finger_param", "nf"),
+        "style": analog.get("style", "subckt"),
         "sizing": analog.get("sizing_um") or {},
         # switches carry their own sizing: widening them to cut Ron must not
         # also widen the unit capacitor
@@ -78,6 +79,21 @@ def device_binding(profile):
 
 
 def mos(dev, name, d, g, s, b, model, w, l, nf):
+    """One device instance.
+
+    Two emission styles, selected by the PDK's ``analog.style``:
+
+      * ``subckt`` -- ``X<name> ... <model>`` against a vendor ``.subckt``
+        whose device model is wrapped inside it (sky130, ihp-sg13g2).
+      * ``bare_m`` -- ``M<name> ... <model>`` against a flattened ``.model``
+        card (ics55's Xyce BSIM4 deck has no vendor subckt: the wrapper is
+        HSpice-only, so the leaf must call the bare model directly).  Units go
+        in metres for a ``.model`` device, not the ``u`` suffix the subckt
+        wrappers accept.
+    """
+    if dev.get("style") == "bare_m":
+        return (f"M{name} {d} {g} {s} {b} {model} "
+                f"w={w:g}e-6 l={l:g}e-6 {dev['finger']}={nf}")
     return (f"X{name} {d} {g} {s} {b} {model} "
             f"w={w:g}u l={l:g}u {dev['finger']}={nf}")
 
@@ -116,8 +132,9 @@ def topo_switch_tg(dev, p):
     antenna rules.
     """
     sw = dev.get("switch_sizing") or dev["sizing"]
-    wn = p.get("wn") or sw.get("wn", 1.0)
-    wp = p.get("wp") or sw.get("wp", 2.0)
+    mult = float(p.get("width_um", 1.0))
+    wn = (p.get("wn") or sw.get("wn", 1.0)) * mult
+    wp = (p.get("wp") or sw.get("wp", 2.0)) * mult
     l = p.get("l") or sw.get("l", 0.15)
     lines = [".subckt SARADC_SW_TG S SB Z1 Z2 VDD VSS"]
     lines.append(mos(dev, "MN", "Z2", "S", "Z1", "VSS", dev["nmos"], wn, l, 1))
@@ -139,8 +156,9 @@ def topo_switch_bootstrap(dev, p):
     characterization bench flattens this leaf and probes them.
     """
     sw = dev.get("switch_sizing") or dev["sizing"]
-    wn = p.get("wn") or sw.get("wn", 1.0)
-    wp = p.get("wp") or sw.get("wp", 2.0)
+    mult = float(p.get("width_um", 1.0))
+    wn = (p.get("wn") or sw.get("wn", 1.0)) * mult
+    wp = (p.get("wp") or sw.get("wp", 2.0)) * mult
     l = p.get("l") or sw.get("l", 0.15)
     cboot_ff = float(p.get("cboot_ff", 100.0))
     lines = [".subckt SARADC_SW_BOOT CLK VIN VOUT VDD VSS"]
@@ -204,10 +222,11 @@ def topo_cdac_binary(dev, p):
     The 2^N-th unit is the fixed dummy that sets the reference.
     """
     n = int(p.get("nbits", 8))
-    lines = [".subckt SARADC_CDAC_BINARY VSH "
+    lines = ["* requires: SARADC_CAP_UNIT, SARADC_SW_TG",
+             ".subckt SARADC_CDAC_BINARY VSH "
              + " ".join(f"B{i}" for i in range(n)) + " "
              + " ".join(f"BB{i}" for i in range(n))
-             + " VREFH VREFL VNW VPW"]
+             + " VREFH VREFL VNW VPW VDD VSS"]
     total = 0
     for i in range(n):
         count = 1 << i
@@ -218,13 +237,19 @@ def topo_cdac_binary(dev, p):
             lines.append(f"XC{i}_{k} VSH {node} VNW VPW SARADC_CAP_UNIT")
         lines.append(f"XSW{i} B{i} BB{i} VREFH {node} VDD VSS SARADC_SW_TG")
         lines.append(f"XSWN{i} BB{i} B{i} VREFL {node} VDD VSS SARADC_SW_TG")
+    # The (2^N)th unit is the fixed dummy: its bottom plate is always driven
+    # to VREFL so the switched array always sees the same total capacitance.
+    # It is not a conversion bit; it only closes the top-plate charge budget.
     lines.append(f"XDUM VSH ndum VNW VPW SARADC_CAP_UNIT")
+    lines.append(f"XSWDUMH VSS VDD VREFH ndum VDD VSS SARADC_SW_TG")
+    lines.append(f"XSWDUML VDD VSS VREFL ndum VDD VSS SARADC_SW_TG")
     lines.append(".ends")
     meta = {"topology": "cdac_binary", "nbits": n,
-            "unit_caps": total + 1, "switches_tg": 2 * n,
+            "unit_caps": total + 1, "switches_tg": 2 * n + 2,
+            "requires_subckts": ["SARADC_CAP_UNIT", "SARADC_SW_TG"],
             "ports": (["VSH"] + [f"B{i}" for i in range(n)]
                       + [f"BB{i}" for i in range(n)]
-                      + ["VREFH", "VREFL", "VNW", "VPW"])}
+                      + ["VREFH", "VREFL", "VNW", "VPW", "VDD", "VSS"])}
     return "\n".join(lines), meta
 
 
@@ -254,10 +279,49 @@ def macro_verilog(name, ports):
             decl.append(f"    output wire {p}")
         else:
             decl.append(f"    inout  wire {p}")
-    body = "\n".join(decl)
+    body = ",\n".join(decl)
     return (f"// Generated analog macro {name}. Black box: timing is owned by the\n"
             f"// target PDK flow, never inferred from this file.\n"
             f"module {name} (\n{body}\n);\nendmodule\n")
+
+
+def selfcheck_spice(circuit, ports):
+    """Fail generation if the subckt's own port contract is broken.
+
+    Every declared port must be referenced in the body, and every net used
+    on an instance line that names a well-known supply (VDD/VSS/VREFH/VREFL/
+    VNW/VPW) must actually be a declared port -- otherwise the net is a
+    dangling implicit node that only .global would rescue.
+    """
+    head = next(l for l in circuit.splitlines() if l.startswith(".subckt"))
+    declared = head.split()[2:]
+    problems = []
+    body_nets = set()
+    for line in circuit.splitlines():
+        if line.startswith(("*", ".subckt", ".ends")):
+            continue
+        body_nets.update(t for t in line.split()[1:-1] if not t.startswith("$"))
+    for port in declared:
+        if port not in body_nets:
+            problems.append(f"declared port {port} never used in body")
+    for net in body_nets:
+        if net in ("VDD", "VSS", "VREFH", "VREFL", "VNW", "VPW") \
+                and net not in declared:
+            problems.append(f"supply net {net} used but not a declared port")
+    if problems:
+        raise SystemExit("generated subckt failed self-check:\n  "
+                         + "\n  ".join(problems))
+    return declared
+
+
+def selfcheck_verilog(text, ports):
+    """A generated ANSI port list must carry exactly len(ports)-1 commas."""
+    head = text[text.index("("):text.index(");")]
+    commas = head.count(",")
+    if len(ports) > 1 and commas != len(ports) - 1:
+        raise SystemExit(f"generated macro.v port list has {commas} commas "
+                         f"for {len(ports)} ports")
+    return True
 
 
 def gds_layers(path):
@@ -315,8 +379,24 @@ def report_ok(path, kind):
     text = open(expand(path), encoding="utf-8", errors="replace").read().lower()
     if kind == "lvs":
         return ("circuits match uniquely" in text or "lvs match" in text
-                or "match-unique" in text or "lvs clean" in text)
+                or "match-unique" in text or "lvs clean" in text
+                or "netlists match" in text or "ics55_lvs_compare=pass" in text)
     return "drc clean" in text or "violations: 0" in text or "errors=0" in text
+
+
+def report_mentions(path, name):
+    """A PASS string in an unrelated report is not evidence for this cell.
+
+    Require the report's text to name the cell we generated (or the file
+    itself to be named after it), so a clean report for a different design
+    cannot promote this manifest to SIGNOFF_ELIGIBLE.
+    """
+    if not path or not os.path.isfile(expand(path)):
+        return False
+    if name.lower() in os.path.basename(expand(path)).lower():
+        return True
+    text = open(expand(path), encoding="utf-8", errors="replace").read().lower()
+    return name.lower() in text
 
 
 # --------------------------------------------------------------------------
@@ -330,6 +410,7 @@ def generate(profile, topology, name, outdir, params, layout_gds=None,
         raise SystemExit(f"unknown topology {topology!r}; "
                          f"choose from {', '.join(sorted(TOPOLOGIES))}")
     circuit, meta = TOPOLOGIES[topology](dev, params or {})
+    selfcheck_spice(circuit, meta["ports"])
 
     layout_physical = False
     layout_audit = None
@@ -349,16 +430,28 @@ def generate(profile, topology, name, outdir, params, layout_gds=None,
     if drc and not drc_ok:
         raise SystemExit(f"{drc}: DRC report is not clean")
 
-    signoff = bool(layout_physical and drc_ok and lvs_ok and pex_ok)
+    # a report is only evidence if it can be tied to THIS cell
+    evidence_bound = True
+    for report in (drc, lvs):
+        if report and not report_mentions(report, name):
+            raise SystemExit(
+                f"{report}: report does not name {name}; an unrelated "
+                "clean report cannot promote this manifest")
+
+    signoff = bool(layout_physical and drc_ok and lvs_ok and pex_ok
+                   and evidence_bound)
     stage = ("SIGNOFF_ELIGIBLE" if signoff else "LVS_MATCHED" if lvs_ok
              else "GEOMETRY_DRC_PASS" if drc_ok
              else "LAYOUT_ATTACHED" if layout_physical else "SCHEMATIC_ONLY")
+
+    macro_v = macro_verilog(name, meta["ports"])
+    selfcheck_verilog(macro_v, meta["ports"])
 
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "circuit.spice"), "w", encoding="utf-8") as fh:
         fh.write(circuit + "\n")
     with open(os.path.join(outdir, "macro.v"), "w", encoding="utf-8") as fh:
-        fh.write(macro_verilog(name, meta["ports"]))
+        fh.write(macro_v)
 
     views = {
         "circuit_spice": {"path": os.path.join(outdir, "circuit.spice"),
@@ -388,6 +481,7 @@ def generate(profile, topology, name, outdir, params, layout_gds=None,
         "status": stage,
         "physical_layout": layout_physical,
         "physical_signoff_eligible": signoff,
+        "evidence_bound": evidence_bound,
         "topology_match": bool(lvs_ok),
         "device_models": {"nmos": dev["nmos"], "pmos": dev["pmos"],
                           "finger_param": dev["finger"]},

@@ -89,11 +89,96 @@ ARCHITECTURES = ("sar", "ramp", "sdm", "vco", "dual_slope", "flash",
                  "pipeline", "ti")
 
 
+def _cdac_backend_guard(spec, profile):
+    """The schema admits split/segmented/monotonic/nonbinary CDAC backends,
+    but no evaluator or generator implements them yet.  Rather than size a
+    binary array and silently return it under a different name, fail closed
+    so the report says exactly what was not delivered.
+    """
+    backend = str((spec.get("cdac") or {}).get("backend", "binary"))
+    if backend == "binary":
+        return None
+    return {
+        "arch": str(spec.get("arch", "sar")),
+        "pdk": profile["id"],
+        "family": profile.get("family"),
+        "nbits": int(spec["resolution"]),
+        "vfs": float(spec["input"]["vfs"]),
+        "vdd": profile.get("vdd"),
+        "fs_target": float(spec["fs_hz"]),
+        "cu_ff": 0.0, "c_tot_ff": 0.0,
+        "binding_constraint": "cdac_backend",
+        "fs_max": 0.0, "dnl_msb_sigma_lsb": 0.0, "area_cap_um2": 0.0,
+        "status": "FAIL_UNSUPPORTED",
+        "notes": [f"cdac.backend '{backend}' is accepted by the schema but "
+                  "no evaluator/generator implements it yet; only 'binary' "
+                  "is sized"],
+        "assumed_inputs": [],
+    }
+
+
+def _scale_switch(sw, width_mult):
+    """Return `sw` with ron/off-cap scaled for a width_um knob.
+
+    The profile's `width_study` is a measured sweep (mult -> ron/c_off at a
+    fixed L).  A spec that asks for width_um = mult * base_width lands on a
+    measured point when one exists; otherwise the resistance is interpolated
+    on the (1/W) asymptote and the off-cap on the (W) asymptote -- the two
+    trends a transmission gate actually follows.  mult=1 is the base point and
+    leaves `sw` untouched.
+    """
+    if width_mult == 1.0:
+        return sw
+    study = sw.get("width_study")
+    base = float(sw.get("ron_ohm", 0.0))
+    base_c = float(sw.get("c_off_ff", 0.0))
+    if not study:
+        # no measured curve: fall back to the first-order scaling and flag it
+        out = dict(sw)
+        out["ron_ohm"] = base / width_mult
+        out["c_off_ff"] = base_c * width_mult
+        out["source"] = "scaled"
+        out.setdefault("notes", "")
+        return out
+    pts = {float(p.get("mult", 1.0)): p for p in study}
+    if width_mult in pts:
+        p = pts[width_mult]
+        out = dict(sw)
+        out["ron_ohm"] = float(p.get("ron_max_ohm", base))
+        out["ron_typ_ohm"] = float(p.get("ron_typ_ohm", sw.get("ron_typ_ohm", base)))
+        out["c_off_ff"] = float(p.get("c_off_ff", base_c))
+        out["source"] = "measured"
+        return out
+    # interpolate on the measured curve in log space (Ron ~ 1/W, C ~ W)
+    import bisect
+    ms = sorted(pts)
+    lo = max([m for m in ms if m <= width_mult], default=ms[0])
+    hi = min([m for m in ms if m >= width_mult], default=ms[-1])
+    if hi == lo:
+        ron = float(pts[lo]["ron_max_ohm"])
+        coff = float(pts[lo]["c_off_ff"])
+    else:
+        f = math.log(width_mult / lo) / math.log(hi / lo)
+        ron = math.exp(math.log(pts[lo]["ron_max_ohm"]) * (1 - f)
+                       + math.log(pts[hi]["ron_max_ohm"]) * f)
+        coff = pts[lo]["c_off_ff"] * (1 - f) + pts[hi]["c_off_ff"] * f
+    out = dict(sw)
+    out["ron_ohm"] = ron
+    out["c_off_ff"] = coff
+    out["source"] = "scaled"
+    return out
+
+
 def evaluate(spec, profile, headroom=DEFAULT_HEADROOM, temperature=T_DEFAULT):
     """Dispatch on spec["arch"].  A profile that does not carry the block an
     architecture needs raises KeyError, which the callers turn into
     FAIL_UNCHARACTERIZED (same contract as a missing cap class)."""
     arch = str(spec.get("arch", "sar")).lower()
+    # every cdac-consuming architecture is gated by the same backend check
+    guard = _cdac_backend_guard(spec, profile)
+    if guard is not None and arch in ("sar", "ramp", "sdm", "dual_slope",
+                                      "flash", "pipeline", "ti", "vco"):
+        return guard
     if arch == "sar":
         return evaluate_sar(spec, profile, headroom, temperature)
     if arch == "ramp":
@@ -143,6 +228,11 @@ def evaluate_sar(spec, profile, headroom=DEFAULT_HEADROOM, temperature=T_DEFAULT
     cap, cap_note = pick_cap(profile, spec["cdac"]["cap"])
     sw = profile["switches"][spec["sampling"]["backend"]]
     cmp_ = profile["comparator"][spec["comparator"]["backend"]]
+    # optional switch-width knob: pick the measured point on the profile's
+    # width_study curve and scale Ron/off-cap from the characterised base.
+    sampling = spec.get("sampling") or {}
+    sw_width_mult = float(sampling.get("width_um", 1.0))
+    sw = _scale_switch(sw, sw_width_mult)
 
     notes = []
     assumed = []
@@ -231,12 +321,44 @@ def evaluate_sar(spec, profile, headroom=DEFAULT_HEADROOM, temperature=T_DEFAULT
             assumed.append(label + "(unmarked)")
 
     # ---- status -----------------------------------------------------------
+    # input range: the requested full-scale must fit inside the rails at the
+    # input common-mode.  differential vfs is the peak-to-peak differential
+    # swing; each leg carries vfs/2 around vcm.
+    mode = str(spec["input"].get("mode", "differential"))
+    vdd = float(profile.get("vdd") or 0.0)
+    vcm = float(spec["input"].get("vcm", vdd / 2.0)) if vdd else 0.0
+    in_range_ok, in_range_note = True, None
+    if vdd <= 0:
+        in_range_note = "profile has no vdd; input range unverified"
+    else:
+        if mode == "differential":
+            # differential vfs is the peak-to-peak swing of (VIP - VIN); each
+            # leg carries half of it, so the leg amplitude about vcm is vfs/4
+            need = vfs / 4.0
+            head = min(vcm, vdd - vcm)
+        else:
+            need = vfs          # single-ended leg swings the full vfs about 0
+            head = vdd
+        if need > head + 1e-9:
+            in_range_ok = False
+            in_range_note = (
+                f"input {mode} vfs={vfs:.2f} V exceeds the rails: vcm={vcm:.2f} V "
+                f"leaves {head:.2f} V headroom for a {need:.2f} V swing "
+                f"on vdd={vdd:.2f} V")
+    if in_range_note and in_range_ok:
+        notes.append(in_range_note)
+
     if comp_margin < 1.0:
         status = "FAIL_COMPARATOR"
         notes.append(
             f"comparator noise {comp_sigma_uv:.0f} uV exceeds the {comp_budget_uv:.0f} uV "
             f"budget; need a quieter front end or fewer bits"
         )
+    elif not in_range_ok:
+        status = "FAIL_INPUT_RANGE"
+        notes.append(in_range_note)
+    elif cu_source == "override" and cu_ff < cu_auto_ff:
+        status = "FAIL_CAP_FLOOR"
     elif fs_target > fs_max:
         status = "FAIL_SETTLING"
         notes.append(
@@ -1417,6 +1539,13 @@ def _provenance(pairs):
 
 def human(report):
     arch = report.get("arch", "sar")
+    # fail-closed guard reports carry no per-arch detail
+    if report.get("status") == "FAIL_UNSUPPORTED":
+        lines = [f"[FAIL_UNSUPPORTED] {report['pdk']}  {report['nbits']}-bit  "
+                 f"{arch}  target={report['fs_target']/1e3:.0f} kS/s"]
+        for note in report.get("notes", []):
+            lines.append(f"  note           {note}")
+        return "\n".join(lines)
     render = {"sar": human_sar, "ramp": human_ramp,
               "sdm": human_sdm, "vco": human_vco,
               "dual_slope": human_dual_slope, "flash": human_flash,

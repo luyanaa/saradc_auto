@@ -197,11 +197,11 @@ specs (including the new `ti`, `sdm12`, `pipeline10` rows).
 
 | model | result |
 |---|---|
-| dual-slope 8 b | max\|DNL\| 0.016 LSB, max\|INL\| 1.500 LSB, 0 missing; DNL bound 0.000 LSB (monotonic); SNDR 50.16 dB (8.04 b), worst harmonic −61.2 dBc |
-| flash 8 b | max\|DNL\| 0.312 LSB, max\|INL\| 2.266 LSB, 0 missing, bubbles 0.00 %; 3σ prediction 0.301 vs 0.50 target; SNDR 49.72 dB (7.97 b) |
-| pipeline 8 b | 7×1.5 b uncalibrated, 0.2 % gain error: max\|DNL\| 2.266 LSB, max\|INL\| 1.734 LSB, 1 missing code, in-range clipping 0 %; SNDR 49.40 dB (7.91 b) |
-| pipeline 10 b | 9×1.5 b calibrated (0.0488 %): max\|DNL\| 2.250 LSB, max\|INL\| 1.750 LSB, 1 missing; SNDR 61.61 dB (9.94 b), worst harmonic −70.5 dBc |
-| TI 8 b | SNDR 50.07 dB; measured SFDR 62.1 dB at 23.54·fs (quantiser-limited); predicted mismatch spurs −79.8/−92.0/−128.4 dBc |
+| dual-slope 8 b | max\|DNL\| 0.016 LSB, max\|INL\| 1.500 LSB, 0 missing; DNL bound 0.000 LSB (monotonic); SNDR 49.70 dB (7.96 b), SFDR 64.4 dBc, THD −67.6 dB, SNR 49.8 dB |
+| flash 8 b | max\|DNL\| 0.344 LSB, max\|INL\| 2.266 LSB, 0 missing, bubbles 0.00 %; 3σ prediction 0.301 vs 0.50 target; SNDR 49.65 dB (7.96 b), SFDR 65.8 dBc |
+| pipeline 8 b | 7×1.5 b uncalibrated, 0.2 % gain error: max\|DNL\| 2.266 LSB, max\|INL\| 1.734 LSB, 1 missing code, in-range clipping 0 %; SNDR 49.08 dB (7.86 b), SFDR 62.5 dBc |
+| pipeline 10 b | 9×1.5 b calibrated (0.0488 %): max\|DNL\| 2.250 LSB, max\|INL\| 1.750 LSB, 1 missing; SNDR 60.79 dB (9.81 b), SFDR 73.7 dBc, THD −74.0 dB |
+| TI 8 b | SNDR 49.72 dB; measured SFDR 67.4 dB at 3.70·fs (quantiser-limited); predicted mismatch spurs −79.8/−92.0/−152.5 dBc |
 | SDM 8 b | OSR64 ideal 70.10 / decimated 68.66 dB; alias 115.9 dB; droop −0.04 dB; static DNL 0.00 / INL 0.50 LSB |
 | SDM 12 b | OSR128 ideal 86.46 / decimated 86.38 dB; alias 140.4 dB; droop −0.01 dB; static DNL 2.00 / INL 3.50 LSB, 590 missing (measurement floor 3.50 LSB) |
 | SDM 8 b, 3-bit DAC | OSR32 ideal 55.00 / decimated 55.03 dB; CIC5/R1=2 alias 130.9 dB vs 92.2 required; feasibility DNL 0.39 LSB; the loop model is still 1-bit (caveat printed) |
