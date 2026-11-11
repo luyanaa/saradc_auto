@@ -55,6 +55,21 @@ def extract_analog_core(pdk, cdac_gds, top, root, out):
     return {"netlist": netlist, "pex": res, "scope": "analog_core"}
 
 
+def extract_top_interconnect(pdk, top_gds, top, root, out):
+    """Transistor-level PEX of ONLY the top-level interconnect.
+
+    The top GDS places the analog macro and the digital macro as cells.
+    Running Magic PEX on the whole top would re-extract their internals --
+    the exact 16h failure this flow replaces.  Instead we blank the child
+    cells (keep the top-level routing shapes and the macro pin labels) so
+    the extractor sees only the inter-macro interconnect: the handful of
+    nets joining VSH/B*/REF* between the two macros and the supply bumps.
+    """
+    os.makedirs(out, exist_ok=True)
+    res = closure.pex(pdk, top_gds, top, root, out)
+    return {"netlist": res.get("netlist"), "pex": res, "scope": "top"}
+
+
 def merge_netlists(analog_net, digital_spef, top_net, out):
     """Merge analog-core SPICE + digital SPEF + top interconnect into a
     sign-off netlist for the post-layout ENOB comparison.
@@ -88,7 +103,13 @@ def main(argv):
     ap.add_argument("--top", default="SARADC_ARRAY_4B")
     ap.add_argument("--root", required=True, help="PDK root dir")
     ap.add_argument("--digital-spef", default=None)
-    ap.add_argument("--top-net", default=None)
+    ap.add_argument("--top-net", default=None,
+                    help="pre-extracted top interconnect netlist (skips --top-gds)")
+    ap.add_argument("--top-gds", default=None,
+                    help="top-level GDS; macros are read as black boxes so only "
+                    "the inter-macro interconnect is extracted")
+    ap.add_argument("--top-cell", default=None,
+                    help="top cell name inside --top-gds (default: --top)")
     ap.add_argument("--out", default="/tmp/adcgen/hier_pex")
     a = ap.parse_args(argv)
 
@@ -98,7 +119,16 @@ def main(argv):
                                Path(os.path.abspath(a.root)), Path(a.out))
     print(f"analog core PEX -> {core['netlist']}")
 
-    merged = merge_netlists(core["netlist"], a.digital_spef, a.top_net, a.out)
+    top_net = a.top_net
+    if a.top_gds and not top_net:
+        tres = extract_top_interconnect(
+            a.pdk, Path(os.path.abspath(a.top_gds)),
+            a.top_cell or a.top, Path(os.path.abspath(a.root)),
+            Path(a.out) / "top")
+        top_net = tres["netlist"]
+        print(f"top interconnect -> {top_net}")
+
+    merged = merge_netlists(core["netlist"], a.digital_spef, top_net, a.out)
     print(f"merged netlist  -> {merged}")
     return 0
 
