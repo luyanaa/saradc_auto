@@ -68,12 +68,14 @@ if {[info exists ::env(CMP_KIND)] && $::env(CMP_KIND) eq "STRONGARM"} {
   puts "WARNING: but no physical leaf (GDS/LEF) yet."
   verilog_defines -DSARADC_CMP_STRONGARM
 }
-# SEQ_KIND=ASYNC swaps the clocked sequencer for the self-timed one.  This is
-# an RTL-level change, so it elaborates and places -- but the handshake's
-# delays are behavioural, so timing is not sign-off quality.
+# SEQ_KIND=ASYNC swaps the clocked sequencer for the self-timed one.  The
+# sequencer is now synthesizable logic (DFFs on RDY + latches), so it maps
+# like the SYNC path; the handshake still depends on the comparator's own
+# regeneration delay, which SPICE -- not this STA -- must bound.
 if {[info exists ::env(SEQ_KIND)] && $::env(SEQ_KIND) eq "ASYNC"} {
   puts "SEQ_KIND=ASYNC: sar_logic_async selected"
-  puts "WARNING: async handshake uses behavioural delays; not sign-off timed."
+  puts "WARNING: async conversion timing is set by comparator regeneration;"
+  puts "         verify the RDY<->CMPSTART delays against SPICE, not STA."
   verilog_defines -DSARADC_SEQ_ASYNC
 }
 

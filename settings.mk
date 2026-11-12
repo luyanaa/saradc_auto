@@ -23,6 +23,7 @@ $(ROOT_DIR)/rtl/saradc_analog.v \
 $(ROOT_DIR)/rtl/sw.v \
 $(ROOT_DIR)/rtl/sar_logic_buf.v \
 $(ROOT_DIR)/rtl/sar_logic_conv_async.v \
+$(ROOT_DIR)/rtl/sar_logic_async.v \
 $(ROOT_DIR)/rtl/saradc.v
 
 # "MOSCAP" (taped-out golden) or "MOM" (metal fringe cap, gen/analog)
@@ -37,12 +38,11 @@ SEQ_KIND?=SYNC
 DIGTOP=sar_logic_wreset
 SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v
 # SEQ_KIND=ASYNC pulls in the self-timed sequencer and its analog conv path.
-# sar_logic_async is a blackbox to yosys (level-sensitive FSM); its behaviour
-# is verified in rtl/saradc_async_tb.v.
-# sar_logic_async is a blackbox to yosys (cells/sar_logic_async_blackbox.v);
-# the behavioural model rtl/sar_logic_async.v is only read by the testbench.
+# rtl/sar_logic_async.v is now synthesizable (DFFs on RDY + latches), so it
+# replaces the earlier blackbox stub.  The behavioural reference model
+# rtl/sar_logic_async_behav.v is only read by testbenches.
 SYN_DIG_ASYNC_SRC=$(ROOT_DIR)/rtl/sar_logic_conv_async.v \
-$(ROOT_DIR)/cells/sar_logic_async_blackbox.v
+$(ROOT_DIR)/rtl/sar_logic_async.v
 ifeq ($(SEQ_KIND),ASYNC)
 DIGTOP=sar_logic_async
 SYN_DIG_SRC+=$(SYN_DIG_ASYNC_SRC)

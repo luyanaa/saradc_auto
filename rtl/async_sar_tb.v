@@ -1,4 +1,4 @@
-// Testbench for sar_logic_async.v
+// Testbench for sar_logic_async.v (the synthesizable sequencer).
 //
 // The comparator is modelled at the protocol level: CMPSTART high -> it
 // regenerates after CMP_DELAY and raises RDY; CMPSTART low -> it precharges

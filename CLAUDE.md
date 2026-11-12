@@ -184,13 +184,19 @@ other's internals:
 ## Asynchronous SAR sequencer (integrated behind SEQ_KIND)
 - `SARADC` takes `parameter SEQ_KIND = "SYNC"`; `SEQ_KIND="ASYNC"` selects the
   self-timed `sar_logic_async` controller.  Both sequencers are instantiated
-  and a small mux picks RESULTP/N/SAMPLE/VALID (the async one is a blackbox to
-  yosys, so it adds one cell, not logic).  Flow switch `SEQ_KIND=ASYNC` ->
-  `-DSARADC_SEQ_ASYNC`.
-- `rtl/sar_logic_async.v`: level-sensitive FSM, GO -> SAMPLE -> per-bit
-  evaluate/precharge on the comparator's RDY (= NAND(OUTP,OUTN)).  Emits
-  `CMPSTART` (1=evaluate, 0=precharge), which the top muxes onto the analog's
-  `CMPCLK` in place of the system clock.
+  and a small mux picks RESULTP/N/SAMPLE/VALID.  Flow switch `SEQ_KIND=ASYNC`
+  -> `-DSARADC_SEQ_ASYNC`.
+- `rtl/sar_logic_async.v`: the **synthesizable** controller.  GO -> SAMPLE ->
+  per-bit evaluate/precharge on the comparator's RDY (= NAND(OUTP,OUTN)).  It
+  is written as a state register clocked on RDY plus two combinational flags
+  (`armed` = GO&~RST, `req`), so yosys maps it to real DFFs + gates (15 cells:
+  `$adff`/`$adffe`/mux), not a blackbox.  Emits `CMPSTART` (1=evaluate,
+  0=precharge), which the top muxes onto the analog's `CMPCLK` in place of the
+  system clock.  `armed`/`req` are combinational -- putting `done` in the
+  reset path glitched `clr` on the LSB's RDY edge, so `done` only gates VALID
+  and `req`.
+- `rtl/sar_logic_async_behav.v`: the level-sensitive reference model kept for
+  mixed-signal testbenches and equivalence checks; identical port contract.
 - `rtl/sar_logic_conv_async.v`: the async control path for
   `saradc_logic_buf`.  Same port contract as `saradc_logic_conv`, so the buf
   instantiates it unchanged behind the SEQ_KIND generate.  Mapping: PRE=SAMPLE,
@@ -200,21 +206,22 @@ other's internals:
 - `SARADC_ANALOG` gained a `CMPSTART` input and `CMPOB` output (the
   comparator's OUTN leg, previously left unconnected) -- both are SEQ_KIND
   plumbing, no existing port changes.
-- Verified: `iverilog -DSARADC_SEQ_ASYNC` elaborates, and
-  `rtl/saradc_async_tb.v` runs the full SARADC (both sequencers live) 4/4
-  codes correct, 18 ns conversion in the model.  Standalone
-  `rtl/async_sar_tb.v` also passes.  yosys synthesizes both SEQ_KIND variants
-  (SYNC 3395 / ASYNC 3383 flattened cells).
-- **Caveats.**  (a) `sar_logic_async` is a level-sensitive FSM, so yosys
-  cannot map it to flip-flops.  It is a hard macro to the flow:
-  `cells/sar_logic_async_blackbox.v` is the synthesizable stub and
-  `rtl/sar_logic_async.v` is the behavioural model that simulation uses --
-  same pattern as the comparator.  A real latch-based implementation is
-  future work.  (b) CR* change combinationally on the RESULT write at the
-  same RDY level that drops CMPSTART, so the DAC's charge injection and the
-  next request are separated only by the comparator's own precharge time; a
-  hardened design adds a settle phase.  (c) The analog delays are behavioural,
-  not sign-off timed.
+- Verified: `iverilog -DSARADC_SEQ_ASYNC` elaborates (16 kind combinations OK),
+  and `rtl/saradc_async_tb.v` runs the full SARADC (both sequencers live) 4/4
+  codes correct, 18 ns conversion in the model.  Standalone `rtl/async_sar_tb.v`
+  passes 4/4, and the behavioural model is code-equivalent to the synthesizable
+  one on the same stimulus.  yosys synthesizes the controller alone to 15
+  cells and the full ASYNC top without errors.
+- **GO contract.**  GO is a level, not a pulse: the host holds GO high until
+  VALID, then drops it to retire the conversion.  A GO-low->high cycle
+  re-arms; holding GO high repeats conversions (continuous mode, same as the
+  sync controller).
+- **Caveats.**  (a) CR* change combinationally on the RESULT write at the same
+  RDY level that drops CMPSTART, so the DAC's charge injection and the next
+  request are separated only by the comparator's own precharge time; a hardened
+  design adds a settle phase.  (b) The conversion timing is set by the
+  comparator's regeneration/precharge delay, which SPICE -- not STA -- must
+  bound.
 
 ## Architecture options (behavioural, `gen/verify/sar_arch_options.py`)
 - `switching_activity()`: conventional differential trials cost 2 events/bit
