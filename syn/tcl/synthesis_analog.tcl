@@ -83,6 +83,13 @@ foreach src $SYN_SRC {
   read_verilog $src
 }
 
+# The analog netlist must NOT contain the digital sequencer gates: P&R links
+# the separately-synthesized digital netlist into SARADC.  Read the sequencer
+# stubs as blackboxes so hierarchy -check resolves the `digital` /
+# `digital_async` instance and write_verilog emits a bare cell reference.
+read_verilog $env(ROOT_DIR)/cells/sar_logic_wreset_blackbox.v
+read_verilog $env(ROOT_DIR)/cells/sar_logic_async_blackbox.v
+
 read_verilog $env(ROOT_DIR)/cells/sg13g2f_blackboxes.v
 
 hierarchy -check -top $::env(TOP)

@@ -1,3 +1,14 @@
+# The two cap leaves expose the same two nodes under different names: the
+# MOSCAP leaf ties i (gate) to vdd/vss/zn (shorted source+drain+body), so its
+# terminals are i/zn; the metal MOM leaf has no body terminal and names them
+# VSH/FL.  Every place that reads a cap pin by name goes through this map.
+proc cap_pin_names {instobj} {
+  if {[$instobj findITerm i] != "NULL"} {
+    return [list i zn]
+  }
+  return [list VSH FL]
+}
+
 proc create_sw_conn {x y path sizex w s nsw} {
   setAddStripeMode -ignore_nondefault_domains true
   global metal1
@@ -14,7 +25,9 @@ proc create_sw_conn {x y path sizex w s nsw} {
   global ::block
   global dbu
   # Extract all the instances
-  set all_sw "pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2"
+  # Six leaves per switch, including the two charge-injection dummies
+  # added by rtl/sw.v (they still need their metal strap for LVS).
+  set all_sw "pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2 dum_z1 dum_z2"
   set all_inst {}
   for {set i 0} {$i < $nsw} {incr i} {
     foreach sw $all_sw {
@@ -180,7 +193,9 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     
     # Extract all the instances
     set types [list vi2cap cap2vouth cap2voutl]
-    set all_sw [list pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2]
+    # Includes the two charge-injection dummies: their pins carry the same
+  # Z1/Z2 nets, and LVS needs that metal strap.
+  set all_sw [list pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2 dum_z1 dum_z2]
     set all_inst {}
     foreach type $types {
       foreach sw $all_sw {
@@ -211,8 +226,9 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set cap_powu_ury [expr $capu_ury + $abutsizey/2.0]
     set cap_powu_lly [expr $cap_lly - $abutsizey/2.0]
     
+    lassign [cap_pin_names $cap_instobj] cap_i_name cap_zn_name
     # Extract the net of the VSH net capacitor, which is attached to the I
-    set cap_iipin [$cap_instobj findITerm i]
+    set cap_iipin [$cap_instobj findITerm $cap_i_name]
     set cap_ipin [[$cap_iipin getMTerm] getMPins]
     set vsh_name [[$cap_iipin getNet] getName]
     set cap_ipin_shapes [$cap_ipin getGeometry]
@@ -236,7 +252,7 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set vsh_lly [expr $cap_lly+$vsh_i_lly]
     
     # Extract the FL net, attached mainly to ZN
-    set cap_znipin [$cap_instobj findITerm zn]
+    set cap_znipin [$cap_instobj findITerm $cap_zn_name]
     set cap_znpin [[$cap_znipin getMTerm] getMPins]
     set fl_name [[$cap_znipin getNet] getName]
     set cap_znpin_shapes [$cap_znpin getGeometry]
@@ -434,7 +450,8 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set capl_index [expr $indl*$pw*$ph]
       set capl_inst "$pathl.cap\\\[${capl_index}\\\].cap/impl"
       set capl_instobj [$::block findInst $capl_inst]
-      set capl_ipin [$capl_instobj findITerm i]
+      lassign [cap_pin_names $capl_instobj] capl_i_name capl_zn_name
+      set capl_ipin [$capl_instobj findITerm $capl_i_name]
       set vshl_name [[$capl_ipin getNet] getName]
       if {$vshl_name != $vsh_name} {
         # Add the margin. Just a single metal2 pitch
@@ -448,7 +465,8 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set capr_index [expr $indr*$pw*$ph]
       set capr_inst "$pathr.cap\\\[${capr_index}\\\].cap/impl"
       set capr_instobj [$::block findInst $capr_inst]
-      set capr_ipin [$capr_instobj findITerm i]
+      lassign [cap_pin_names $capr_instobj] capr_i_name capr_zn_name
+      set capr_ipin [$capr_instobj findITerm $capr_i_name]
       set vshr_name [[$capr_ipin getNet] getName]
       if {$vshr_name != $vsh_name} {
         # Add the margin. Just a single metal2 pitch
@@ -484,7 +502,7 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set all_capnets [list $vsh_name $fl_name]
     set nall_capnets [llength $all_capnets]
     set capspan [expr ($nall_capnets-1) * $metal3_py*2 + $metal3_w]
-    set capst [expr $cap_lly+($row*$ph - $capspan)/2.0]
+    set capst [expr $cap_lly+(($capu_ury-$cap_lly) - $capspan)/2.0]
     for {set i 0} {$i < $nall_capnets} {incr i} {
       set net [lindex $all_capnets $i]
       set x1 [expr $x + ($pi)*$sizex + $marginl]
@@ -516,11 +534,12 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set cap_instobj [$::block findInst $cap_inst]
     
     # Extract the net of the VSH net capacitor, which is attached to the I
-    set cap_ipin [$cap_instobj findITerm i]
+    lassign [cap_pin_names $cap_instobj] cap_i_name cap_zn_name
+    set cap_ipin [$cap_instobj findITerm $cap_i_name]
     set vsh_name [[$cap_ipin getNet] getName]
     
     # Extract the FL net, attached mainly to ZN
-    set cap_znpin [$cap_instobj findITerm zn]
+    set cap_znpin [$cap_instobj findITerm $cap_zn_name]
     set fl_name [[$cap_znpin getNet] getName]
     
     # Search for the up and down neighboors
@@ -538,7 +557,8 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set capd_index [expr $indd*$pw*$ph]
       set capd_inst "$pathd.cap\\\[${capd_index}\\\].cap/impl"
       set capd_instobj [$::block findInst $capd_inst]
-      set capd_ipin [$capd_instobj findITerm i]
+      lassign [cap_pin_names $capd_instobj] capd_i_name capd_zn_name
+      set capd_ipin [$capd_instobj findITerm $capd_i_name]
       set vshd_name [[$capd_ipin getNet] getName]
       if {$vshd_name != $vsh_name} {
         # Add the margin. Just a single metal4 pitch
@@ -552,7 +572,8 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set capu_index [expr $indu*$pw*$ph]
       set capu_inst "$pathu.cap\\\[${capu_index}\\\].cap/impl"
       set capu_instobj [$::block findInst $capu_inst]
-      set capu_ipin [$capu_instobj findITerm i]
+      lassign [cap_pin_names $capu_instobj] capu_i_name capu_zn_name
+      set capu_ipin [$capu_instobj findITerm $capu_i_name]
       set vshu_name [[$capu_ipin getNet] getName]
       if {$vshu_name != $vsh_name} {
         # Add the margin. Just a single metal4 pitch

@@ -9,31 +9,35 @@
 //                         Voltage-independent, DRC/LVS/PEX proven per PDK.
 //
 // The module ports are unchanged on purpose: the analog hierarchy passes
-// VNW/VPW (AVDD/VSS) and VSH/FL; the MOM cell's substrate terminal is the
-// existing VPW, so no caller has to change.
+// VNW/VPW (AVDD/VSS) and VSH/FL.  The MOSCAP leaf needs both wells; the MOM
+// leaf is a pure metal structure with exactly two terminals (VSH/FL), as
+// drawn by gen/analog/layout_mom_cap.py, so its LEF/GDS/CDL have no body
+// pin and it is instantiated with two connections.  Giving it a third
+// (VPW) terminal here would make the P&R netlist, the LEF and the LVS
+// schematic disagree on the pin list.
+//
+// The leaf is selected with `ifdef SARADC_CAP_MOM, which the flow sets from
+// CAP_KIND (syn/tcl/synthesis_analog.tcl -> verilog_defines), NOT with a
+// generate-if.  The floorplan scripts look the leaf up by path
+// ("...cap[i].cap/impl"); a generate branch would insert a scope level
+// ("...cap[i].cap/mom/impl") and break the taped-out MOSCAP floorplan.
 
 (* keep_hierarchy = "yes" *)
-module SARADC_CAP #(
-  parameter CAP_KIND = "MOSCAP"
-) (
+module SARADC_CAP (
   inout VNW, VPW,
   inout VSH, FL // TODO: Ask Li why those names
 );
 
-  generate
-    if (CAP_KIND == "MOM") begin : mom
-      SARADC_CAP_MOM impl (
-        .VSH(VSH), .FL(FL), .VSS(VPW)
-      );
-    end else begin : moscap
-      SARADC_CELL_INVX16_ASCAP impl (
-    //`ifdef WITH_BODY
-        .vnw(VNW), .vpw(VPW),
-    //`endif
-        .vdd(FL), .vss(FL),
-        .i(VSH), .zn(FL)
-      );
-    end
-  endgenerate
+`ifdef SARADC_CAP_MOM
+  SARADC_CAP_MOM impl (
+    .VSH(VSH), .FL(FL)
+  );
+`else
+  SARADC_CELL_INVX16_ASCAP impl (
+    .vnw(VNW), .vpw(VPW),
+    .vdd(FL), .vss(FL),
+    .i(VSH), .zn(FL)
+  );
+`endif
 
 endmodule

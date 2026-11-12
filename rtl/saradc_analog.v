@@ -44,10 +44,12 @@ module SARADC_ANALOG #(
   localparam nu = 1<<NBITS;
   localparam nc = ncircle(nu);
   localparam nall = nc * nc * 2 + nc * 6 + 4; // Area + perimeter (w being nc*2, h being nc)
-  // The MOSCAP array is surrounded by a dummy ring for matching; the MOM
-  // array is a parametric hard macro that owns its own dummies, so the
-  // RTL ring is disabled for CAP_KIND=MOM.
-  localparam ndummy = (CAP_KIND == "MOM") ? 0 : (nall - nu);
+  // The array is surrounded by a dummy ring for matching: every cell of the
+  // ncircle layout that no real unit occupies gets a dummy unit.  This is
+  // independent of CAP_KIND: the harden flow's floorplan places the ring, and
+  // a real unit's footprint is made to match the dummy footprint (one MOM
+  // macro, or NPW*NPH gate caps; see SARADC_CDAC_UNIT_DUMMY).
+  localparam ndummy = nall - nu;
 
   (* dont_touch = "yes" *)
   wire VOUTH, VOUTL;

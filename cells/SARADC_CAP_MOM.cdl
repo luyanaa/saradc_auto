@@ -1,6 +1,21 @@
 ** Cell name: SARADC_CAP_MOM
-.SUBCKT SARADC_CAP_MOM VSH FL VSS
-Cmain VSH FL 1.879f
-Cfl   FL  VSS 0.631f
-Cvsh  VSH VSS 0.631f
+** Lib name: SARADC_MOM
+** ~3.8 fF lateral MOM unit cap (gen/analog/layout_mom_cap.py, c_ff=2.0).
+**
+** The drawn leaf is a pure metal structure with exactly two terminals:
+** SARADC_CAP_MOM.lef/.gds expose VSH (top plate) and FL (switched bottom
+** plate) and nothing else -- there is no body tap to connect, so the LVS
+** subcircuit must have the same two pins, otherwise the pin lists disagree.
+**
+** Values below are Magic PEX of cells/SARADC_CAP_MOM.gds, quoted for the
+** record only: C(VSH,FL)=3.758 fF, plus 0.631 fF from each plate to the
+** substrate.  (The 1.879 fF figure in earlier revisions of this file was the
+** pre-VIA1-stitch layout, where the M1 comb floated and only M2 contributed.)
+** Those substrate caps are not elements of this subcircuit: they are part of
+** the parasitic extraction of the assembled layout (see
+** cells/SARADC_CAP_MOM.ckt for the simulation model that keeps them, tied to
+** SPICE node 0).  A metal fringe cap has no depletion
+** region, so unlike SARADC_CELL_INVX16_ASCAP the main value does not move
+** with bias.
+.SUBCKT SARADC_CAP_MOM VSH FL
 .ENDS

@@ -35,8 +35,10 @@ foreach LEFFILE $OTHERLEF {
 
 puts "Reading: $env(SYN_NET)"
 read_verilog $env(SYN_NET)
-puts "Reading: $env(SYN_DIG_NET)"
-read_verilog $env(SYN_DIG_NET)
+puts "Reading: $env(SYN_DIG_SYNC_NET)"
+read_verilog $env(SYN_DIG_SYNC_NET)
+puts "Reading: $env(SYN_DIG_ASYNC_NET)"
+read_verilog $env(SYN_DIG_ASYNC_NET)
 link_design ${TOP}
 
 puts "SDC reading: ${TOP}.sdc.tcl"
@@ -71,6 +73,65 @@ set ::chip [[::ord::get_db] getChip]
 set ::tech [[::ord::get_db] getTech]
 set ::block [$::chip getBlock]
 set dbu [$tech getDbUnitsPerMicron]
+
+# The pinned OpenROAD detail placer builds its pixel grid from the block core
+# area and then indexes pixels_[y][x] with the rows, without the bounds clamp
+# that upstream added later in Grid::gridPixel().  This design has two power
+# domains: the CORE rows are inside the digital rect passed as -core_area,
+# while the ANALOG rows (created by set_domain_area) start 433 um to the left
+# of it, so their x_start is negative and libstdc++ aborts on
+# std::vector<dpl::Pixel>::operator[].  Widen the block core to the die for the
+# duration of detailed placement so every row is inside the grid, then restore
+# it so the rest of the flow still sees the digital core.
+proc with_die_core {body} {
+  set block [ord::get_db_block]
+  set die [$block getDieArea]
+  set core [$block getCoreArea]
+  $block setCoreArea $die
+  set rc [catch {uplevel 1 $body} err]
+  $block setCoreArea $core
+  if {$rc} {
+    return -code error $err
+  }
+}
+
+# Every detailed_placement call goes through the same widening.  The flow calls
+# it from the post-place step, from two incremental-repair steps after
+# global_route, and from with_die_core blocks; hooking the command itself means
+# none of those call sites can be forgotten.  Nesting is harmless: the inner
+# call saves and restores the already-widened die rect, and the outer block
+# then puts the real digital core back.
+rename detailed_placement detailed_placement_cmd
+proc detailed_placement {args} {
+  set block [ord::get_db_block]
+  set die [$block getDieArea]
+  set core [$block getCoreArea]
+  $block setCoreArea $die
+  set rc [catch {detailed_placement_cmd {*}$args} err]
+  $block setCoreArea $core
+  if {$rc} {
+    return -code error $err
+  }
+}
+
+# Same DPL pixel-grid issue one level up: repair_design/repair_timing enter
+# dpl through rsz::Resizer -> Opendp::initMacrosAndGrid -> initGrid, which
+# indexes the same out-of-core ANALOG rows.  Wrap them too.
+foreach __wcmd {repair_design repair_timing} {
+  rename $__wcmd ${__wcmd}_cmd
+  proc _$__wcmd {args} "
+    set block \[ord::get_db_block\]
+    set die \[\$block getDieArea\]
+    set core \[\$block getCoreArea\]
+    \$block setCoreArea \$die
+    set rc \[catch {${__wcmd}_cmd {*}\$args} err\]
+    \$block setCoreArea \$core
+    if {\$rc} { return -code error \$err }
+  "
+  rename _$__wcmd $__wcmd
+}
+unset __wcmd
+
 
 # TODO: Is there a way to extract from a command?
 set siteobj [[[::ord::get_db] findLib sg13g2f] findSite obssite]
@@ -136,15 +197,6 @@ set fo [open FPlanFinal.size w]
 puts $fo "Core size: \{X Y\} = ${CoreSize}"
 puts $fo "Floorplan size: \{X Y\} = ${FPsize}"
 close $fo
-
-# Copied from flow/platforms/ihp-sg13g2/make_tracks.tcl inside OpenROAD-flow-scripts
-make_tracks Metal1 -x_offset 0.0  -x_pitch 0.48 -y_offset 0.0 -y_pitch  0.48
-make_tracks Metal2 -x_offset 0.0  -x_pitch 0.42 -y_offset 0.0 -y_pitch  0.42
-make_tracks Metal3 -x_offset 0.0  -x_pitch 0.48 -y_offset 0.0 -y_pitch  0.48
-make_tracks Metal4 -x_offset 0.0  -x_pitch 0.42 -y_offset 0.0 -y_pitch  0.42
-make_tracks Metal5 -x_offset 0.0  -x_pitch 3.48 -y_offset 0.0 -y_pitch  0.48
-make_tracks TopMetal1 -x_offset 1.46 -x_pitch 2.28 -y_offset 1.46 -y_pitch 2.28
-make_tracks TopMetal2 -x_offset 2.0  -x_pitch 4.0  -y_offset 2.0 -y_pitch 4.0
 
 ####################################
 ## ADC Macro placement
@@ -303,6 +355,19 @@ set_domain_area CORE -area $digcorearea
 set_domain_area ANALOG -area $anacorearea
 initialize_floorplan -site obssite -die_area "0 0 $X $Y" -core_area $digcorearea
 
+# Routing tracks must be (re)created AFTER the final initialize_floorplan:
+# re-initializing the floorplan to the computed height wipes them, and the
+# pinned OpenROAD then fails the first add_stripe_over_area with
+# "PPL-0022 Routing tracks not found for layer Metal3".
+# Copied from flow/platforms/ihp-sg13g2/make_tracks.tcl inside OpenROAD-flow-scripts
+make_tracks Metal1 -x_offset 0.0  -x_pitch 0.48 -y_offset 0.0 -y_pitch  0.48
+make_tracks Metal2 -x_offset 0.0  -x_pitch 0.42 -y_offset 0.0 -y_pitch  0.42
+make_tracks Metal3 -x_offset 0.0  -x_pitch 0.48 -y_offset 0.0 -y_pitch  0.48
+make_tracks Metal4 -x_offset 0.0  -x_pitch 0.42 -y_offset 0.0 -y_pitch  0.42
+make_tracks Metal5 -x_offset 0.0  -x_pitch 3.48 -y_offset 0.0 -y_pitch  0.48
+make_tracks TopMetal1 -x_offset 1.46 -x_pitch 2.28 -y_offset 1.46 -y_pitch 2.28
+make_tracks TopMetal2 -x_offset 2.0  -x_pitch 4.0  -y_offset 2.0 -y_pitch 4.0
+
 # connect the fillers
 add_global_connection -net AVDD -inst_pattern analog/buflogic.* -pin_pattern {^vdd$} -power
 add_global_connection -net VSS -inst_pattern analog/buflogic.* -pin_pattern {^vss$} -ground
@@ -333,12 +398,17 @@ define_pdn_grid \
     -voltage_domain ANALOG \
     -pins "TopMetal1 Metal5"
 
+# The pinned OpenROAD (2026-02-17) interprets add_pdn_stripe's -offset
+# relative to the grid's core box, not to the die origin.  The old absolute
+# value (dig_to_ana-2*margin+row = 421.3 um) is far outside the 96 um wide
+# digital core and pdngen aborts (PDN-0185).  Keep the same strap phase modulo
+# the pitch, which is what the phase was really selecting.
 add_pdn_stripe \
     -grid stdcell_core_grid \
     -layer Metal5 \
     -width 3.2 \
     -pitch $pitch \
-    -offset [expr $dig_to_ana-2*$margin+$row] \
+    -offset [expr {fmod($dig_to_ana-2*$margin+$row, $pitch)}] \
     -spacing 1.6 \
     -starts_with POWER -extend_to_boundary
 
@@ -373,13 +443,16 @@ add_pdn_stripe \
     -followpins \
     -extend_to_core_ring
 
+# cdacx_h depends on the cap leaf size (MOM vs MOSCAP), so the derived pitch
+# and offset do not land on the 5 nm manufacturing grid.  pdngen rejects that
+# (PDN-0191); snap them.
 add_pdn_stripe \
     -grid stdcell_analog_grid \
     -layer Metal5 \
     -width 3.2 \
     -spacing 1.6 \
-    -pitch [expr 7*$cdacx_h] \
-    -offset [expr 1.5*$cdacx_h+9] \
+    -pitch [expr {round(7*$cdacx_h/0.005)*0.005}] \
+    -offset [expr {round((1.5*$cdacx_h+9)/0.005)*0.005}] \
     -extend_to_boundary
 
 add_pdn_connect \
@@ -500,7 +573,8 @@ set y2 [expr $posy_cdacl + (2)*$cdacy_l]
 set area "$x1 $y1 $x2 $y2"
 # Get "analog/LSB_L_VSH[2] analog/LSB_L_FL[2]"
 set capobj [$::block findInst "analog/lsb_cdac_l.cdac_bit\\\[1\\\].cdac_unit.cap\\\[0\\\].cap/impl"]
-set LSB_L_VSH_FL_2 [list [[[$capobj findITerm i] getNet] getName] [[[$capobj findITerm zn] getNet] getName]]
+lassign [cap_pin_names $capobj] cap_i_name cap_zn_name
+set LSB_L_VSH_FL_2 [list [[[$capobj findITerm $cap_i_name] getNet] getName] [[[$capobj findITerm $cap_zn_name] getNet] getName]]
 setAddStripeMode -stacked_via_top_layer $metal5 -stacked_via_bottom_layer $metal4
 add_stripe_over_area $LSB_L_VSH_FL_2 $metal5 horizontal \
     $wforth $sforth $cdacy_l \
@@ -508,7 +582,8 @@ add_stripe_over_area $LSB_L_VSH_FL_2 $metal5 horizontal \
 if {$nbits >= 5} {
   # Get "analog/LSB_L_VSH[4] analog/LSB_L_FL[4]"
   set capobj [$::block findInst "analog/lsb_cdac_l.cdac_bit\\\[3\\\].cdac_unit.cap\\\[0\\\].cap/impl"]
-  set LSB_L_VSH_FL_4 [list [[[$capobj findITerm i] getNet] getName] [[[$capobj findITerm zn] getNet] getName]]
+  lassign [cap_pin_names $capobj] cap_i_name cap_zn_name
+set LSB_L_VSH_FL_4 [list [[[$capobj findITerm $cap_i_name] getNet] getName] [[[$capobj findITerm $cap_zn_name] getNet] getName]]
   set x1 [expr $posx_cdacl + ($nx_l_2-3)*$cdacx_l]
   set x2 [expr $posx_cdacl + ($nx_l_2+3)*$cdacx_l]
   set y1 [expr $posy_cdacl + (2)*$cdacy_l]
@@ -538,7 +613,8 @@ set y2 [expr $posy_cdach + ($ny_h-1)*$cdacy_h]
 set area "$x1 $y1 $x2 $y2"
 # Get "analog/LSB_H_VSH[2] analog/LSB_H_FL[2]"
 set capobj [$::block findInst "analog/lsb_cdac_h.cdac_bit\\\[1\\\].cdac_unit.cap\\\[0\\\].cap/impl"]
-set LSB_H_VSH_FL_2 [list [[[$capobj findITerm i] getNet] getName] [[[$capobj findITerm zn] getNet] getName]]
+lassign [cap_pin_names $capobj] cap_i_name cap_zn_name
+set LSB_H_VSH_FL_2 [list [[[$capobj findITerm $cap_i_name] getNet] getName] [[[$capobj findITerm $cap_zn_name] getNet] getName]]
 setAddStripeMode -stacked_via_top_layer $metal5 -stacked_via_bottom_layer $metal4
 add_stripe_over_area $LSB_H_VSH_FL_2 $metal5 horizontal \
     $wforth $sforth $cdacy_h \
@@ -546,7 +622,8 @@ add_stripe_over_area $LSB_H_VSH_FL_2 $metal5 horizontal \
 if {$nbits >= 5} {
   # Get "analog/LSB_H_VSH[4] analog/LSB_H_FL[4]"
   set capobj [$::block findInst "analog/lsb_cdac_h.cdac_bit\\\[3\\\].cdac_unit.cap\\\[0\\\].cap/impl"]
-  set LSB_H_VSH_FL_4 [list [[[$capobj findITerm i] getNet] getName] [[[$capobj findITerm zn] getNet] getName]]
+  lassign [cap_pin_names $capobj] cap_i_name cap_zn_name
+set LSB_H_VSH_FL_4 [list [[[$capobj findITerm $cap_i_name] getNet] getName] [[[$capobj findITerm $cap_zn_name] getNet] getName]]
   set x1 [expr $posx_cdach + ($nx_h_2-3)*$cdacx_h]
   set x2 [expr $posx_cdach + ($nx_h_2+3)*$cdacx_h]
   set y1 [expr $posy_cdach + ($ny_h-4)*$cdacy_h]
@@ -601,8 +678,23 @@ if {[file exists $PNR_DIR/tcl/$TOP.pins.tcl]} {
   source $PNR_DIR/tcl/$TOP.pins.tcl
 }
 
-# Put the main clock buffer near the digital domain
-place_inst -name [list "analog/buflogic.conv.smpcs.clkbuf.impl"] -location "[expr $dig_to_ana-$sizetap-21.76] $posy_sw" -orientation R0 -status LOCKED
+# Put the main clock buffer near the digital domain.
+# The buffer sits under the sequencer's converter: SARADC wraps it in a
+# generate branch (sync_conv / async_conv) chosen by SEQ_KIND, so its full
+# path is not fixed.  Look it up instead of hardcoding the branch name (the
+# old literal "analog/buflogic.conv.smpcs.clkbuf.impl" predates that branch).
+set clkbuf_inst ""
+foreach i [$::block getInsts] {
+  if {[string match "analog/buflogic.*conv.smpcs.clkbuf.impl" [$i getName]]} {
+    set clkbuf_inst [$i getName]
+    break
+  }
+}
+if {$clkbuf_inst eq ""} {
+  error "pnr: clock buffer analog/buflogic.*conv.smpcs.clkbuf.impl not found"
+}
+puts "\[Place\] clock buffer: $clkbuf_inst"
+place_inst -name $clkbuf_inst -location "[expr $dig_to_ana-$sizetap-21.76] $posy_sw" -orientation R0 -status LOCKED
 
 ## Tapcell insertion
 tapcell \
@@ -671,14 +763,20 @@ set_placement_padding -global -right $cell_pad_side -left $cell_pad_side
 # set_placement_padding -masters $::env(CELL_PAD_EXCLUDE) -right 0 -left 0
 set_placement_padding -masters $DIODECells -left $diode_pad_value
 
-detailed_placement -max_displacement [subst { "500" "100" }]
-optimize_mirroring
-if { [catch {check_placement -verbose} errmsg] } {
-    puts stderr $errmsg
-    puts "Check placement failed, but is ignored on purpose"
-    puts "May god forgive our actions"
+with_die_core {
+  detailed_placement -max_displacement [subst { "500" "100" }]
+  optimize_mirroring
+  if { [catch {check_placement -verbose} errmsg] } {
+      puts stderr $errmsg
+      puts "Check placement failed, but is ignored on purpose"
+      puts "May god forgive our actions"
+  }
 }
 #detailed_placement -disallow_one_site_gaps
+
+# Post-placement snapshot: lets a repro script read_def straight into the CTS
+# section (~2min/iter instead of re-running floorplan+place).
+write_def $PNR_DIR/outputs/dbg_post_place.def
 
 ####################################
 # CTS
@@ -708,25 +806,76 @@ set_layer_rc -via TopVia2 -resistance 0.22E-3
 set_wire_rc -signal -layer Metal2
 set_wire_rc -clock  -layer Metal5
 
+puts stderr "\[Flow\] estimate_parasitics (pre-CTS)"
 estimate_parasitics -placement
+puts stderr "\[Flow\] repair_clock_inverters"
 repair_clock_inverters
-clock_tree_synthesis -buf_list $BUFCells -root_buf [lindex $BUFCells 0] -sink_clustering_size 25 -sink_clustering_max_diameter 50 -sink_clustering_enable
-set_propagated_clock [all_clocks]
 
+# CTS workaround for the pinned OpenROAD (2026-02-17, dcf36133):
+# TritonCTS's countSinksPostDbWrite() walks iterm->getFirstOutput()->net with
+# NO visited set.  It terminates only on sequentials/blocks, so any pure
+# combinational net loop reachable from a clock net is an infinite recursion
+# and aborts the process (stack overflow in dbITerm::getAvgXY).  The analog
+# sea behind CLK contains two such loops: the comparator's cross-coupled OAI
+# latch (analog/\cmp.OUTPp <-> OUTNp) and the VALID feedforward
+# (VALID -> cmpbegin CCMPNR -> ... -> comparator -> CMPO -> VALID), reachable
+# through analog/.../smpcs.clkbuf.impl (a BUFFD16 that CTS treats as part of
+# the clock network, not a sink).  The taped-out flow survived because it ran
+# an older OpenROAD without this pass.
+# We detach every analog* INPUT iterm on net CLK for the duration of CTS:
+# the clock tree then covers only the 17 digital FFs (identical to golden),
+# and the detached pins are reconnected right after.  repair_clock_nets /
+# estimate_parasitics run while the analog input is still detached so no
+# equivalent traversal can meet the loop in this window.
+set __cts_saved {}
+set __cts_clknet [[ord::get_db_block] findNet CLK]
+foreach __it [$__cts_clknet getITerms] {
+  if {[$__it getIoType] != "INPUT"} continue
+  if {[string match "analog*" [[$__it getInst] getName]]} {
+    lappend __cts_saved $__it
+    puts stderr "\[Flow\] CTS-detach [[$__it getInst] getName]/[[$__it getMTerm] getName]"
+    $__it disconnect
+  }
+}
+unset __it
+
+puts stderr "\[Flow\] clock_tree_synthesis"
+clock_tree_synthesis -buf_list $BUFCells -root_buf [lindex $BUFCells 0] -sink_clustering_size 25 -sink_clustering_max_diameter 50 -sink_clustering_enable
+puts stderr "\[Flow\] clock_tree_synthesis returned"
+write_def $PNR_DIR/outputs/dbg_post_cts.def
+puts stderr "\[Flow\] dbg_post_cts.def written"
+puts stderr "\[Flow\] set_propagated_clock (post-CTS)"
+set_propagated_clock [all_clocks]
+puts stderr "\[Flow\] set_propagated_clock returned"
+write_def $PNR_DIR/outputs/dbg_post_spc.def
+puts stderr "\[Flow\] dbg_post_spc.def written"
+
+puts stderr "\[Flow\] estimate_parasitics (post-CTS)"
 estimate_parasitics -placement
 
+puts stderr "\[Flow\] repair_clock_nets"
 repair_clock_nets -max_wire_length 0
 
+puts stderr "\[Flow\] estimate_parasitics (post-RCN)"
 estimate_parasitics -placement
 
-detailed_placement
-optimize_mirroring
-if { [catch {check_placement -verbose} errmsg] } {
-    puts stderr $errmsg
-    puts "Check placement failed, but is ignored on purpose"
-    puts "May god forgive our actions"
+# Restore the detached analog clock pin(s) now that the recursive walks are done.
+foreach __it $__cts_saved { $__it connect $__cts_clknet }
+unset __it __cts_saved __cts_clknet
+
+puts stderr "\[Flow\] detailed_placement (post-CTS)"
+with_die_core {
+  detailed_placement
+  optimize_mirroring
+  if { [catch {check_placement -verbose} errmsg] } {
+      puts stderr $errmsg
+      puts "Check placement failed, but is ignored on purpose"
+      puts "May god forgive our actions"
+  }
 }
 
+write_def $PNR_DIR/outputs/dbg_post_dpl.def
+puts stderr "\[Flow\] report_cts"
 report_cts -out_file $PNR_DIR/reports/cts.rpt
 
 ###############################################
@@ -736,7 +885,9 @@ set_propagated_clock [all_clocks]
 
 set_macro_extension 0
 
+puts stderr "\[Flow\] pin_access"
 pin_access
+puts stderr "\[Flow\] global_route"
 if { [catch {global_route -allow_congestion -congestion_iterations 50 -verbose -congestion_report_file $PNR_DIR/reports/congestion.rpt} errmsg] } {
     puts stderr $errmsg
     puts "Global routing failed with congestions, but is ignored on purpose"
@@ -745,21 +896,45 @@ if { [catch {global_route -allow_congestion -congestion_iterations 50 -verbose -
 
 set_placement_padding -global -left 0 -right 0
 set_propagated_clock [all_clocks]
-estimate_parasitics -global_routing
+
+# Parasitics invalidation safety + Steiner-vs-groute selection.
+# Anything that edited the DB since the last estimate (cts buffers, dpl
+# moves, pin_access, global_route) leaves stale entries in
+# parasitics_invalid_, which the IncrementalParasiticsGuard around
+# repair_design/repair_timing hard-errors on (EST-0104) -- so we must
+# re-estimate first.  BUT we deliberately use -placement, NOT
+# -global_routing: with routing parasitics the resizer builds each load
+# tree from the global-route guides (makeBufferedNetGroute), and on this
+# design the guide set for some 8-load analog net is incomplete, so the
+# build aborts with "RSZ-0074 failed to build tree ... found route to 5
+# pins, expected 8".  Placement parasitics build the tree with FLUTE over
+# the pin coordinates instead -- every load is reachable -- and the repair
+# completes.  The slightly-less-accurate parasitics only affect the repair
+# heuristics, not the final signoff estimates.
+estimate_parasitics -placement
 
 # Incremental repair blob
+puts stderr "\[Flow\] repair_design"
 repair_design -verbose
+puts stderr "\[Flow\] global_route (incremental, post-place)"
 global_route -start_incremental -allow_congestion
 detailed_placement
 global_route -end_incremental -allow_congestion -congestion_report_file $PNR_DIR/reports/${TOP}_congestion_post_repair_design.rpt
 
+# Refresh placement parasitics so repair_timing's IncrementalParasiticsGuard
+# sees a clean flag (the incremental route edits nets) AND so it builds load
+# trees with FLUTE, not from the incomplete global-route guides (RSZ-0074).
+estimate_parasitics -placement
+puts stderr "\[Flow\] repair_timing"
 repair_timing -verbose -setup_margin 0 -repair_tns 100
+puts stderr "\[Flow\] global_route (incremental, post-repair_timing)"
 
 global_route -start_incremental -allow_congestion
 detailed_placement
 global_route -end_incremental -allow_congestion -congestion_report_file $PNR_DIR/reports/${TOP}_congestion_post_repair_timing.rpt
 
 # Repair power blob
+puts stderr "\[Flow\] global_route (incremental, recover_power)"
 global_route -start_incremental -allow_congestion
 # recover_power_helper
 global_route -end_incremental -allow_congestion -congestion_report_file $PNR_DIR/reports/${TOP}_congestion_post_recover_power.rpt
@@ -772,11 +947,13 @@ global_route -end_incremental -allow_congestion -congestion_report_file $PNR_DIR
 #    puts "May god forgive our actions"
 #}
 #check_antennas -report_file $PNR_DIR/reports/${TOP}_global_routing_antennas.log
+puts stderr "\[Flow\] estimate_parasitics (post-route)"
 estimate_parasitics -global_routing
 
 ###############################################
 # Fillers
 ###############################################
+puts stderr "\[Flow\] filler_placement"
 filler_placement "$FILLERCells"
 
 add_global_connection -net VDD -inst_pattern clkbuf.* -pin_pattern {^vdd$} -power
@@ -799,11 +976,19 @@ set_thread_count 10
 set all_args [concat [list \
   -output_drc $PNR_DIR/reports/${TOP}.drc \
   -output_maze $PNR_DIR/reports/${TOP}_maze.log \
-  -droute_end_iter 64 \
+  -droute_end_iter 40 \
   -verbose 1 \
   -drc_report_iter_step 5]]
 
+# 40, not 64: the MOM build plateaus at ~51 violations around iteration 30
+# (the "stubborn tiles" rounds then cost ~11 minutes each without improving
+# the count), so an unbounded run spends hours to write the same DEF.  40
+# bounds a full P&R to a few hours; the leftover violations are recorded in
+# reports/SARADC.drc-*.rpt, not silently dropped.
+
+puts stderr "\[Flow\] detailed_route"
 detailed_route {*}$all_args
+puts stderr "\[Flow\] detailed_route done"
 
 #set repair_antennas_iters 1
 #if { [repair_antennas] } {
@@ -834,8 +1019,24 @@ detailed_route {*}$all_args
 #define_process_corner -ext_model_index 0 X
 #extract_parasitics -ext_model_file $RCX_RULES -lef_res
 
+# Power estimate.  There is no measured number anywhere in the repo
+# (PPA_STUDY.md section 1.4), so the P&R database is asked for one.  The
+# switching activity has to be assumed: 0.1 on inputs and sequential outputs is
+# the usual placeholder, which makes this a *relative* number (per-lever
+# comparison), not a signoff claim.  Wrapped in catch so an OpenSTA version
+# without set_default_switching_activity does not abort the flow after routing.
+puts stderr "\[Flow\] report_power"
+if {[catch {
+  set_default_switching_activity -input_activity 0.1 -seq_activity 0.1
+  report_power > $PNR_DIR/reports/${TOP}_power.rpt
+} errmsg]} {
+  puts stderr "\[Flow\] report_power failed: $errmsg"
+}
+
+puts stderr "\[Flow\] write_db"
 write_db DesignLib
 
+puts stderr "\[Flow\] write_verilog"
 write_verilog $PNR_DIR/outputs/${TOP}.v
 write_verilog -include_pwr_gnd $PNR_DIR/outputs/${TOP}_pg.v
 write_def $PNR_DIR/outputs/${TOP}.def
@@ -843,4 +1044,6 @@ write_def $PNR_DIR/outputs/${TOP}.def
 remove_adc_collateral_supplies
 write_abstract_lef $PNR_DIR/outputs/${TOP}.lef
 # write_timing_model $PNR_DIR/outputs/${TOP}.lib
+puts stderr "\[Flow\] write_cdl"
 write_cdl -masters ${CDLS} $PNR_DIR/outputs/${TOP}.cdl
+puts stderr "\[Flow\] DONE"

@@ -1,12 +1,24 @@
 ** Cell name: SARADC_CAP_MOM
 ** Lib name: SARADC_MOM
-** 2 fF lateral MOM unit cap (gen/analog/layout_mom_cap.py).
-** Values are Magic PEX of cells/SARADC_CAP_MOM.gds, not the analytic
-** estimate:  C(VSH,FL)=1.879 fF, C_FL,sub=C_VSH,sub=0.631 fF.
-** A metal fringe cap has no depletion region, so unlike
-** SARADC_CELL_INVX16_ASCAP these values do not move with bias.
-.SUBCKT SARADC_CAP_MOM VSH FL VSS
-Cmain VSH FL 1.879f
-Cfl   FL  VSS 0.631f
-Cvsh  VSH VSS 0.631f
+** ~3.8 fF lateral MOM unit cap (gen/analog/layout_mom_cap.py, c_ff=2.0).
+**
+** Simulation model for the assembled ADC.  Values are Magic PEX of the
+** shipped cells/SARADC_CAP_MOM.gds, not the analytic estimate:
+** C(VSH,FL)=3.758 fF, C_FL,sub=C_VSH,sub=0.631 fF.  (1.879 fF was the
+** pre-VIA1-stitch revision: the M1 comb floated and only M2 contributed.)
+**
+** Node list is VSH/FL only, matching the drawn cell (two metal terminals, no
+** body tap) and therefore the LEF/GDS/RTL/P&R netlist.  The plate-to-substrate
+** caps need a ground reference: they go to SPICE node 0.  Every bench in this
+** repo drives the analog VSS at 0 V (src/saradc_tb_body.sp has vgnd at 0 V),
+** so 0 is the substrate terminal without inventing a floating node.
+**
+** For netgen/KLayout LVS use cells/SARADC_CAP_MOM.cdl (same two pins, no
+** parasitics); this file is only for SPICE/Xyce simulation.
+** A metal fringe cap has no depletion region, so unlike its MOSCAP
+** counterpart these values do not move with bias.
+.SUBCKT SARADC_CAP_MOM VSH FL
+Cmain VSH FL 3.758f
+Cfl   FL  0    0.631f
+Cvsh  VSH 0    0.631f
 .ENDS

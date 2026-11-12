@@ -28,9 +28,12 @@ module SARADC_CELL_INVX16_ASCAP(
         vdd, vss;
 endmodule
 
+// 2 pins only: the drawn leaf is pure metal (VSH top plate / FL bottom
+// plate), there is no body terminal.  Must match cells/SARADC_CAP_MOM.lef
+// and cells/SARADC_CAP_MOM.cdl pin-for-pin.
 (* blackbox *)
-module SARADC_CAP_MOM(VSH, FL, VSS);
-    inout VSH, FL, VSS;
+module SARADC_CAP_MOM(VSH, FL);
+    inout VSH, FL;
 endmodule
 
 (* blackbox *)

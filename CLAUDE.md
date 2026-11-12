@@ -87,20 +87,24 @@ other's internals:
 ## MOM capacitor (Bug3 -- implemented, wired into RTL)
 - Schematic: `topo_cap_mom` in `gen/analog/macro_gen.py` (ideal fringe cap +
   Csub/CWnw parasitics, voltage-independent).
-- **RTL select:** `SARADC`/`SARADC_ANALOG`/`CDAC*`/`SARADC_CAP` all take
-  `parameter CAP_KIND = "MOSCAP"`.  `CAP_KIND="MOM"` instantiates the
-  `SARADC_CAP_MOM` blackbox instead of `SARADC_CELL_INVX16_ASCAP`, sets
-  `CAP_MULT=1` (one leaf per binary element instead of NPW*NPH gate caps) and
-  disables the RTL dummy ring.  Ports are unchanged.
+- **RTL select:** leaf choice is by `` `ifdef SARADC_CAP_MOM `` inside
+  `rtl/cap.v` (SARADC_CAP) and `rtl/cdac_unit.v` (switch leaf), NOT by
+  generate-if parameters, so the flattened instance paths stay identical to
+  the taped-out floorplan.  `CAP_MULT = NPW*NPH` for BOTH kinds (a MOM leaf
+  replaces the whole 6-cap gate cluster per unit position) and the RTL dummy
+  ring stays enabled (ndummy = nall-nu = 28/side).  Ports are unchanged.
 - Flow switch: `CAP_KIND=MOM` in `settings.mk` / env -> `syn/tcl/synthesis_analog.tcl`
-  does `verilog_defines -DSARADC_CAP_MOM`, which flips `SARADC`'s default to
-  `"MOM"`.  Verified with yosys: default 4271 cells / 720 ASCAP; `-DSARADC_CAP_MOM`
-  1671 cells / 64 `SARADC_CAP_MOM` / 0 ASCAP; both elaborate in iverilog.
+  does `verilog_defines -DSARADC_CAP_MOM`.  Verified with yosys:
+  `-DSARADC_CAP_MOM` build has 720 `SARADC_CAP` (all MOM leaf, .VSH/.FL only),
+  363 `SARADC_SW`, 56 dummy units -- same counts as the MOSCAP golden.
 - Abstract cell: `cells/SARADC_CAP_MOM.{gds,lef,ckt,cdl,port.csv}`.  LEF is
-  1.85x4.21 um with VSH (top bus) / FL (bottom bus) pins.  SPICE values are
-  Magic PEX of the shipped GDS: `Cmain=1.879 fF`, `Cfl=Cvsh=0.631 fF`
-  (voltage-independent, no depletion region).  Registered in
-  `cells/settings.tcl` (LEFS/CDLS) and `cells/sg13g2f_blackboxes.v`.
+  1.85x4.21 um, exactly TWO pins VSH/FL (pure metal leaf, no body tap); the
+  RTL/cdl/LVS view is 2-terminal for that reason, and the sim model
+  (`.ckt`) ties the plate-to-substrate caps to SPICE node 0.  Values are
+  Magic PEX of the shipped GDS: `C(VSH,FL)=3.758 fF`, `Cfl=Cvsh=0.631 fF`
+  (voltage-independent).  The 1.879 fF in older notes was the
+  pre-VIA1-stitch revision (M1 comb floated; only M2 contributed).
+  Registered in `cells/settings.tcl` (LEFS/CDLS).
 - Geometry: `gen/analog/layout_mom_cap.py` (leaf) and `layout_mom_array.py`
   (array) share `gen/analog/mom_geom.py`, so leaf/array pitch/margins cannot
   drift.  Leaf = interdigitated M1/M2 combs, both buses VIA1-stitched; no
@@ -255,6 +259,65 @@ other's internals:
   centred layout ran it parallel to the row's (necessarily long) VSH rail over
   empty metal, and B0 read 5.92 fF instead of ~1.94 fF.  The FL rail must span
   the active block only; that is why `put_row()` starts it at `x0 - 0.3`.
+
+## P&R vs pinned OpenROAD 2026-02-17 (dcf36133): known crashes + workarounds
+- **DPL pixel-grid abort.**  `detailed_placement` builds its pixel grid over
+  the *block core area*; our ANALOG rows sit outside the digital core
+  (x=18 vs core xMin=452) so dpl indexes a negative pixel and aborts.
+  Fix in `pnr/tcl/pnr.tcl`: a `detailed_placement` proc wrapper
+  (`rename`+redefine) widens core->die for every call, restores after.
+- **CTS stack overflow (the hard one).**  `clock_tree_synthesis` ends in
+  `writeDataToDb` -> `countSinksPostDbWrite`, which recurses
+  iterm->`getFirstOutput()`->net with NO visited set; it stops only at
+  sequentials/blocks.  Our netlist has pure-combinational loops reachable
+  from net CLK through `analog/.../smpcs.clkbuf.impl` (BUFFD16, treated as
+  clock-net buffer, not a sink): the comparator's cross-coupled OAI latch
+  (`analog/\cmp.OUTPp <-> OUTNp`) and the VALID feedforward
+  (`VALID -> cmpbegin.CCMPNR -> ... -> comparator -> CMPO -> VALID`).
+  Result: unbounded recursion -> SIGSEGV (top 40 gdb frames all
+  `countSinksPostDbWrite`).  The tape-out flow survived only because its
+  older OpenROAD lacked this pass.  Workaround in `pnr/tcl/pnr.tcl`: all
+  `analog*` INPUT iterms on net CLK are disconnected for the CTS window
+  (`$it disconnect`), reconnected after `repair_clock_nets`.  Clock tree =
+  17 digital FFs only, same as golden.  A second contributor -- the
+  `CMPO -> ND2D1(RDY) -> digital_async -> CMPSTART -> analog.CMPCLK -> CMPO`
+  loop -- is removed at the RTL source: `rtl/saradc.v` gates CMPSTART by
+  `& (SEQ_KIND == "ASYNC")`, so a SYNC build folds analog.CMPSTART to 1'b0.
+- **Flow markers.**  All stage boundaries print `[Flow] ...` to *stderr*
+  (stdout is block-buffered and the crash swallowed the last lines).
+  Debug DEFs: `dbg_post_place.def` (pre-CTS, pair with
+  `/tmp/opencode/repro_cts.tcl` for ~2min CTS iterations), `dbg_post_cts.def`,
+  `dbg_post_spc.def`.
+- `pnr/Makefile` has `OR_CMD ?= openroad -exit` so the same target can run
+  under gdb: `make -C pnr OR_CMD=/tmp/opencode/openroad_gdb.sh`
+  (`nix-shell -p gdb`, stack trace lands in the log).
+- **RSZ-0074 in repair_design.**  After global_route, `repair_design`
+  aborted with "failed to build tree from gloubal routes: found route to 5
+  pins, expected 8".  Cause: with `-global_routing` parasitics the resizer
+  rebuilds each driver->load tree from the global-route guide set
+  (`rsz::Resizer::makeBufferedNetGroute`), and some 8-load net's guides did
+  not cover all its pins.  Fix in `pnr/tcl/pnr.tcl`: re-estimate with
+  `estimate_parasitics -placement` (NOT `-global_routing`) immediately
+  before both `repair_design` and `repair_timing`.  That (a) clears the
+  parasitics-invalid flag the IncrementalParasiticsGuard checks (EST-0104)
+  and (b) makes the repair build load trees with FLUTE over pin
+  coordinates instead of from the incomplete guides.  Verified: the
+  repro `repro5.tcl` runs repair_design to 0 remaining violations.
+- `ODB-0047` (dbInst::getFirstOutput wants DIRECTION OUTPUT non-supply) was
+  fixed by flipping `SARADC_CELL_INVX0_ASSW.lef` pin `zn` to
+  `DIRECTION OUTPUT ; USE SIGNAL`.  `DPL-0033` after detailed placement is
+  pre-existing golden behaviour (caught and ignored).
+
+## Hierarchical PEX target
+- `make -C signoff pex` runs `signoff/tcl/pex.tcl`: Magic per-cell extraction
+  (`extract do local on` + `extract all`, `ext2spice hierarchy on`,
+  `cthresh/rthresh 0`, `format ngspice`, `subcircuit top on`) over the
+  assembled `signoff/outputs/SARADC.gds` -> `SARADC.pex.spice`.  Replaces the
+  flat-chip plan that never finished (KLayout 16h+, Magic 100x rail caps).
+- `src/adc_char.py flatten()` now keeps leaf `C` elements and auto-appends
+  `cells/SARADC_CAP_MOM.ckt` when the P&R CDL mentions SARADC_CAP_MOM --
+  without it the MOM CDAC flattens to zero capacitance (the leaf is an empty
+  2-pin subcircuit in the LVS CDL).
 
 ## Conventions
 - Commit only when the user asks; end commit messages with

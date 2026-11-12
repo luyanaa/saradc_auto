@@ -15,12 +15,15 @@ module SARADC_CDAC_UNIT_DUMMY # (
   //       is cumbersome to name every single net
   // wire CRI, CRIB, CRH, CRHB, CRL, CRLB, 
   wire VI, VOUTH, VOUTL, VSH, FL;
+  // The dummy unit must occupy the same footprint and the same 3x2 cap bank
+  // as a real unit: NPW*NPH caps of whichever kind (see SARADC_LSB_CDAC).
+  localparam integer CAP_MULT = NPW*NPH;
+
   SARADC_CDAC_UNIT #(
-    .CAP_KIND(CAP_KIND),
     .NSW_VI(1),
     .NSW_VOUTH(1),
     .NSW_VOUTL(1),
-    .NSW_CAP(NPW*NPH)
+    .NSW_CAP(CAP_MULT)
   ) cdac_unit (
     .VDD(VDD), .VSS(VSS), 
     .CRI(CRI), .CRIB(CRIB),

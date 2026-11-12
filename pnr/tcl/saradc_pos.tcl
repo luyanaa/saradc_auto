@@ -4,16 +4,26 @@ proc pos_sw_wtap {x y path capw tapcap nsw} {
   global metal1_py
   global saradc_fill_nopower
   global dbu
-  set spc 2
-  set spcend 8
+  # Leaf pitch.  It must NOT be 0: each leaf is an inverter whose vdd/vss rail
+  # rects span the full 1.7 um cell width (see SARADC_CELL_INVX0_ASSW.lef), and
+  # the six leaves of one switch carry DIFFERENT nets (Z1/Z2), so abutting them
+  # would merge the rails into a Z1-Z2 short.  One track (0.34 um, one
+  # NOPOWER filler) keeps them apart and stays above the 0.16 um M1 spacing.
+  # Group-to-group spacing is 2 tracks for the same reason; 8 tracks (the old
+  # value for 4-leaf groups) pushed the unit pitch past the analog domain edge.
+  set spc 1
+  set spcend 2
   set tap_lib [[::ord::get_db] findLib $tapcap]
   set tap_master [$tap_lib findMaster $tapcap]
   set sizetap [expr 1.0*[$tap_master getWidth] / $dbu]
   set sw_lib [[::ord::get_db] findLib "SARADC_CELL_INVX0_ASSW"]
   set sw_master [$sw_lib findMaster "SARADC_CELL_INVX0_ASSW"]
   set swsizex [expr 1.0*[$sw_master getWidth] / $dbu]
-  set totalsizex [expr 4*$nsw*$swsizex + (3*$spc*$nsw + $spcend*($nsw-1))*$track]
-  set stpx [expr $x+($capw - $totalsizex)/2.0]
+  set totalsizex [expr 6*$nsw*$swsizex + (5*$spc*$nsw + $spcend*($nsw-1))*$track]
+  # Centre the switch row in the cap bank, but never let it start left of the
+  # unit: with MOM the caps are much narrower than the switch row, and a
+  # negative offset would place the row on top of the previous unit's taps.
+  set stpx [expr {$totalsizex > $capw ? $x : $x+($capw - $totalsizex)/2.0}]
   set px $stpx
   set py $y
   set mir R0
@@ -358,13 +368,17 @@ proc pos_cdac_unit {x y path ind pw ph} {
   # Positioning of the switch
   # TODO: We are assuming 12 implementations
   set nsw 3
-  set spc 2
-  set spcend 8
+  # See pos_sw_wtap: 6 leaves per group, 5 internal 1-track gaps, 2 tracks
+  # between groups.  Never 0 here either -- the leaves' full-width rails carry
+  # different nets.
+  set spc 1
+  set spcend 2
   set sw_lib [[::ord::get_db] findLib "SARADC_CELL_INVX0_ASSW"]
   set sw_master [$sw_lib findMaster "SARADC_CELL_INVX0_ASSW"]
   set swsizex [expr 1.0*[$sw_master getWidth] / $dbu]
-  set totalsizex [expr 4*$nsw*$swsizex + (3*$spc*$nsw + $spcend*($nsw-1))*$track]
-  set stpx [expr $x+(($capx-$x) - $totalsizex)/2.0]
+  set totalsizex [expr 6*$nsw*$swsizex + (5*$spc*$nsw + $spcend*($nsw-1))*$track]
+  set capw [expr $capx-$x]
+  set stpx [expr {$totalsizex > $capw ? $x : $x+($capw - $totalsizex)/2.0}]
   set px $stpx
   set py [expr $capy + $metal1_py*$ntrack_capsw]
   
@@ -435,9 +449,9 @@ proc insert_fill {x y mir repsx repsy master name} {
       set pmir [expr {$j % 2? $mired : $mirst}]
       if {[inst_exist ${name}_${i}_${j}] == 1} {
         [$::block findInst ${name}_${i}_${j}] setPlacementStatus UNPLACED
-        place_inst -name [list ${name}_${i}_${j}] -location "$px $py" -orientation $pmir -status LOCKED
+        place_inst -name ${name}_${i}_${j} -location "$px $py" -orientation $pmir -status LOCKED
       } else {
-        place_inst -name [list ${name}_${i}_${j}] -cell $master -location "$px $py" -orientation $pmir  -status LOCKED
+        place_inst -name ${name}_${i}_${j} -cell $master -location "$px $py" -orientation $pmir  -status LOCKED
       }
     }
   }
@@ -451,7 +465,10 @@ proc pos_sw {x y path spc spcb spca infill} {
   global dbu
   
   # Query all the instances. Not all of them exist
-  set all_sw "pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2"
+  # Six leaf cells per switch: the four pass devices plus the two
+  # charge-injection dummies added by rtl/sw.v.  All of them are BLOCK
+  # masters, so pdngen aborts (PDN-0235) unless every one is fixed.
+  set all_sw "pgp_lz1 pgn_lz1 pgp_lz2 pgn_lz2 dum_z1 dum_z2"
   set all_inst {}
   foreach sw $all_sw {
     set inst ${path}/$sw
@@ -460,13 +477,19 @@ proc pos_sw {x y path spc spcb spca infill} {
     }
   }
   # puts "\[pos_sw\] $path inst:$all_inst"
+  set all_inst_l [llength $all_inst]
+  if {$all_inst_l == 0} {
+    # No switch under this path.  That is always a netlist/hierarchy bug: the
+    # floorplan used to die later with a bare 'can't read "pitchx"' from the
+    # placement arithmetic, which hid the real cause.  Fail with the path.
+    error "pos_sw: no switch instance under $path (expected one of: $all_sw)"
+  }
   # Spacings before
   set mir R0
   if {$infill} { insert_fill $x $y $mir $spcb 1 $saradc_fill_nopower ${inst}_FILLB }
   set x [expr $x+$track*$spcb]
   
   # Cycle the instances
-  set all_inst_l [llength $all_inst]
   for {set i 0} {$i < $all_inst_l} {incr i} {
     set inst [lindex $all_inst $i]
     set sizex [expr 1.0*[[[$::block findInst $inst] getMaster] getWidth] / $dbu]
@@ -479,7 +502,7 @@ proc pos_sw {x y path spc spcb spca infill} {
     if {[[$::block findInst $inst] isPlaced] == 1} {
       [$::block findInst $inst] setPlacementStatus UNPLACED
     }
-    place_inst -name [list $inst] -location "$px $py" -orientation $mir -status LOCKED
+    place_inst -name $inst -location "$px $py" -orientation $mir -status LOCKED
     
     # Place the intermediate fillers
     if {$i != [expr $all_inst_l - 1]} {
@@ -529,7 +552,7 @@ proc pos_caps {x y path ind pw ph} {
       if {[[$::block findInst $cap_inst] isPlaced] == 1} {
         [$::block findInst $cap_inst] setPlacementStatus UNPLACED
       }
-      place_inst -name [list $cap_inst] -location "$px $py" -orientation $mir -status LOCKED
+      place_inst -name $cap_inst -location "$px $py" -orientation $mir -status LOCKED
     }
   }
   

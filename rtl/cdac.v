@@ -15,14 +15,19 @@ module SARADC_LSB_CDAC # (
   inout [NBITS:0] VSH, FL // Debug signals (Capacitor terminals, there is one more for the dummy)
 );
   
-  // One MOM leaf is the unit; the MOSCAP unit is NPW*NPH gate caps.
-  localparam integer CAP_MULT = (CAP_KIND == "MOM") ? 1 : (NPW*NPH);
+  // Per bit-weighting slot the array always holds NPW*NPH caps, whatever the
+  // kind: NPW*NPH gate caps for MOSCAP, NPW*NPH MOM leaves for MOM.  The
+  // count must NOT depend on CAP_KIND: the harden floorplan addresses the
+  // array as "cap[ind*NPW*NPH .. ind*NPW*NPH+NPW*NPH-1]" (one 3x2 bank per
+  // bit-weighting slot) and derives the unit pitch from that first bank.
+  // Making MOM one leaf per slot silently moved every higher-bit leaf and
+  // collapsed the array.
+  localparam integer CAP_MULT = NPW*NPH;
 
   genvar i;
   generate
     for(i = 0; i < NBITS; i = i + 1) begin : cdac_bit
       SARADC_CDAC_UNIT #(
-        .CAP_KIND(CAP_KIND),
         .SW_KIND(SW_KIND),
         .NSW_VI(1 << i), // 1, 2, 4, 8...
         .NSW_VOUTH(1 << i), // 1, 2, 4, 8...
@@ -45,7 +50,6 @@ module SARADC_LSB_CDAC # (
   
   // The dummy CDAC
   SARADC_CDAC_UNIT #(
-    .CAP_KIND(CAP_KIND),
     .SW_KIND(SW_KIND),
     .NSW_VI(1),
     .NSW_VOUTH(1),
@@ -82,11 +86,10 @@ module SARADC_MSB_CDAC # (
   SARADC_CELL_TIEH tieh(.VDD(VDD), .VSS(VSS), .Z(one));
   SARADC_CELL_TIEL tiel(.VDD(VDD), .VSS(VSS), .ZN(zero));
   
-  localparam integer CAP_MULT = (CAP_KIND == "MOM") ? 1 : (NPW*NPH);
+  localparam integer CAP_MULT = NPW*NPH; // same 3x2 bank as the LSB units
 
   // This CDAC unit is connected backwards
   SARADC_CDAC_UNIT #(
-    .CAP_KIND(CAP_KIND),
     .SW_KIND(SW_KIND),
     .NSW_VI(1 << NBITS),
     .NSW_VOUTH(1 << NBITS),

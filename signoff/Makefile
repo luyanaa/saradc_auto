@@ -33,8 +33,8 @@ $(SIGN_DIR)/outputs/%.gds: $(PNR_DIR)/outputs/%.def
 ifeq ($(PDK_FILE),none)
 	klayout -zz -rd design_name=$(TOP) \
 	        -rd in_def=$< \
-	        -rd lef_files="$(ROOT_DIR)/cells/$(TECH).tech.lef $(ROOT_DIR)/cells/$(TECH).lef $(ROOT_DIR)/cells/SARADC_CELL_INVX0_ASSW.lef $(ROOT_DIR)/cells/SARADC_CELL_INVX16_ASCAP.lef $(ROOT_DIR)/cells/SARADC_FILLTIE2.lef $(ROOT_DIR)/cells/SARADC_FILL1.lef $(ROOT_DIR)/cells/SARADC_FILL1_NOPOWER.lef" \
-	        -rd in_files="$(ROOT_DIR)/cells/$(TECH).gds $(ROOT_DIR)/cells/SARADC_CELL_INVX0_ASSW.gds $(ROOT_DIR)/cells/SARADC_CELL_INVX16_ASCAP.gds $(ROOT_DIR)/cells/SARADC_FILLTIE2.gds $(ROOT_DIR)/cells/SARADC_FILL1.gds $(ROOT_DIR)/cells/SARADC_FILL1_NOPOWER.gds" \
+	        -rd lef_files="$(ROOT_DIR)/cells/$(TECH).tech.lef $(ROOT_DIR)/cells/$(TECH).lef $(ROOT_DIR)/cells/SARADC_CELL_INVX0_ASSW.lef $(ROOT_DIR)/cells/SARADC_CELL_INVX16_ASCAP.lef $(ROOT_DIR)/cells/SARADC_CAP_MOM.lef $(ROOT_DIR)/cells/SARADC_FILLTIE2.lef $(ROOT_DIR)/cells/SARADC_FILL1.lef $(ROOT_DIR)/cells/SARADC_FILL1_NOPOWER.lef" \
+	        -rd in_files="$(ROOT_DIR)/cells/$(TECH).gds $(ROOT_DIR)/cells/SARADC_CELL_INVX0_ASSW.gds $(ROOT_DIR)/cells/SARADC_CELL_INVX16_ASCAP.gds $(ROOT_DIR)/cells/SARADC_CAP_MOM.gds $(ROOT_DIR)/cells/SARADC_FILLTIE2.gds $(ROOT_DIR)/cells/SARADC_FILL1.gds $(ROOT_DIR)/cells/SARADC_FILL1_NOPOWER.gds" \
 	        -rd seal_file="" \
 	        -rd out_file=$@ \
 	        -rd tech_file=$(TECH_PDK)/libs.tech/klayout/tech/sg13g2.lyt \
@@ -57,7 +57,18 @@ drc: $(GDS)
 drc_magic: $(GDS)
 	magic -dnull -noconsole -rcfile $(PDK_ROOT)/$(PDK)/libs.tech/magic/$(PDK).magicrc $(SIGN_DIR)/tcl/run_magic_drc.tcl
 
-ADC_CELLS ?= SARADC_CELL_INVX0_ASSW SARADC_CELL_INVX16_ASCAP SARADC_FILLTIE2 SARADC_FILL1 SARADC_FILL1_NOPOWER
+# Hierarchical (per-cell) post-layout extraction.  See tcl/pex.tcl and
+# gen/analog/hier_pex.py for why the flat chip is never extracted.
+PEX=$(SIGN_DIR)/outputs/$(TOP).pex.spice
+
+pex: $(GDS)
+	mkdir -p $(SIGN_DIR)/outputs $(SIGN_DIR)/reports
+	TOP=$(TOP) GDS=$(GDS) OUT=$(PEX) magic -dnull -noconsole \
+	        -rcfile $(TECH_PDK)/libs.tech/magic/$(PDK).magicrc \
+	        $(SIGN_DIR)/tcl/pex.tcl
+	@ls -l $(PEX)
+
+ADC_CELLS ?= SARADC_CELL_INVX0_ASSW SARADC_CELL_INVX16_ASCAP SARADC_CAP_MOM SARADC_FILLTIE2 SARADC_FILL1 SARADC_FILL1_NOPOWER
 ADC_CDLS = $(ADC_CELLS:%=$(ROOT_DIR)/cells/%.cdl)
 
 $(SPICE): $(ROOT_DIR)/cells/$(TECH).cdl $(ADC_CDLS) $(NET)

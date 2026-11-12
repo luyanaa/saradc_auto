@@ -23,7 +23,6 @@ $(ROOT_DIR)/rtl/saradc_analog.v \
 $(ROOT_DIR)/rtl/sw.v \
 $(ROOT_DIR)/rtl/sar_logic_buf.v \
 $(ROOT_DIR)/rtl/sar_logic_conv_async.v \
-$(ROOT_DIR)/rtl/sar_logic_async.v \
 $(ROOT_DIR)/rtl/saradc.v
 
 # "MOSCAP" (taped-out golden) or "MOM" (metal fringe cap, gen/analog)
@@ -35,17 +34,17 @@ CMP_KIND?=LATCH
 # "SYNC" (one bit per CLK, golden) or "ASYNC" (self-timed on comparator RDY)
 SEQ_KIND?=SYNC
 
+# Sequencer RTL.  Each controller is synthesized to its own netlist and P&R
+# links whichever the top references: SARADC instantiates both `digital`
+# (sar_logic_wreset) and `digital_async` (sar_logic_async) and muxes them, so
+# a hardened build needs both netlists regardless of SEQ_KIND.
+DIG_SYNC_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v
+DIG_ASYNC_SRC=$(ROOT_DIR)/rtl/sar_logic_async.v
 DIGTOP=sar_logic_wreset
-SYN_DIG_SRC=$(ROOT_DIR)/rtl/sar_logic_wreset.v
-# SEQ_KIND=ASYNC pulls in the self-timed sequencer and its analog conv path.
-# rtl/sar_logic_async.v is now synthesizable (DFFs on RDY + latches), so it
-# replaces the earlier blackbox stub.  The behavioural reference model
-# rtl/sar_logic_async_behav.v is only read by testbenches.
-SYN_DIG_ASYNC_SRC=$(ROOT_DIR)/rtl/sar_logic_conv_async.v \
-$(ROOT_DIR)/rtl/sar_logic_async.v
+SYN_DIG_SRC=$(DIG_SYNC_SRC)
 ifeq ($(SEQ_KIND),ASYNC)
 DIGTOP=sar_logic_async
-SYN_DIG_SRC+=$(SYN_DIG_ASYNC_SRC)
+SYN_DIG_SRC=$(DIG_ASYNC_SRC)
 endif
 
 #######################################################
