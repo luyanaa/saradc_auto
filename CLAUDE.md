@@ -308,6 +308,32 @@ other's internals:
   `DIRECTION OUTPUT ; USE SIGNAL`.  `DPL-0033` after detailed placement is
   pre-existing golden behaviour (caught and ignored).
 
+## Detailed-route status of the MOM build (open)
+- OpenROAD DRT converges 5050 -> 51 violations and then plateaus: the
+  "stubborn tiles" rounds at iteration 30+ cost ~11 min each and oscillate
+  51 <-> 69.  `-droute_end_iter` is therefore 40, not 64, so a full P&R
+  terminates in hours instead of half a day; the leftover violations stay in
+  `pnr/reports/SARADC.drc-{5,10,...}.rpt` (iteration-numbered).
+- The 51 are two clusters, both **shorts between a routed gate net and a
+  pin**, not wire-wire crossings the router could rip up:
+  - the constant dummy gates (`dummy_{h,l}.dummy[k].CRH/CRHB`, one tie net
+    each, 6 gate pins per dummy unit x 56 units) against the cap-leaf plates
+    (`VSH/FL/VREF`) -- `Metal Spacing` 0.17 um where 0.21 is required, plus
+    `Short` where the wire clips a plate pin;
+  - `CPRE/CPREB` against `VOUTH/VOUTL` in the `sw_vouth2voutl` group next to
+    the comparator (11 of the 28 shorts), always at a pin edge: e.g.
+    (54.74,165.09)-(54.80,165.39) is the left sliver of `pgn_lz2.vdd` (a
+    1.70 x 0.30 um full-width rail), i.e. the gate wire enters the cell by
+    0.06 um.
+  Both are pin-access problems in a 0.34 um inter-leaf gap, not congestion:
+  the cap plate bars and the switch leaf's `zn` bar (0.16 x 4.24 um, full
+  height) leave one M1 corridor per leaf.
+- Consequence: GDS DRC and LVS on the current DEF will not be clean, and a
+  PEX/sim on it would include those shorts (CPRE shorted to VOUTL kills the
+  comparator).  Fix before trusting any post-layout number; the MOM leaf
+  itself is not implicated (no violation centre falls inside a cap
+  footprint).
+
 ## Hierarchical PEX target
 - `make -C signoff pex` runs `signoff/tcl/pex.tcl`: Magic per-cell extraction
   (`extract do local on` + `extract all`, `ext2spice hierarchy on`,

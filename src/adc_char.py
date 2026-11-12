@@ -247,13 +247,15 @@ def flatten(files, top, dst):
                                         [nm(n) for n in args[:-1]] + [model] + par))
                     continue
                 raise ValueError("unknown subcircuit " + model)
-            if tok[0][0] in "Cc" and len(tok) == 4:
-                # Leaf-level capacitor (cells/SARADC_CAP_MOM.ckt): keep it, with
-                # its nodes renamed into the flattened hierarchy.  Without this
-                # the MOM CDAC would flatten to a netlist with no capacitance at
-                # all, because the drawn leaf has no devices for an extractor to
-                # find -- the cap is the metal itself.
-                # Unique element names, same convention as the MOS branch below.
+            if tok[0][0] in "CcRr" and len(tok) == 4:
+                # Two-node leaf element with a value: the metal MOM cap leaf
+                # (cells/SARADC_CAP_MOM.ckt) and the resistors a hierarchical
+                # PEX adds (signoff/tcl/pex.tcl).  Keep it, with its nodes
+                # renamed into the flattened hierarchy.  Without the C branch
+                # the MOM CDAC would flatten to a netlist with no capacitance
+                # at all, because the drawn leaf has no devices for an
+                # extractor to find -- the cap is the metal itself.
+                # Unique element names, same convention as the MOS branch.
                 out.append(" ".join([tok[0][0] + prefix.replace(".", "_") + tok[0][1:],
                                      nm(tok[1]), nm(tok[2]), tok[3]]))
                 continue
