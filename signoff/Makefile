@@ -50,8 +50,14 @@ view: $(GDS)
 viewpre: $(GDSPRE)
 	klayout -nn $(PDK_KNFILE) -s $(GDSPRE)
 
+# KLayout's python module is a separate nix output; the interpreter on PATH has
+# no `klayout`/`pya`, so the PDK's run_drc.py / run_lvs.py cannot import it.
+# Point PYTHON at an interpreter that can see it, e.g.
+#   make -C signoff drc PYTHON="env PYTHONPATH=$(ls -d /nix/store/*klayout-*-python/lib/python3.13/site-packages) /usr/bin/python3.13"
+PYTHON ?= python3
+
 drc: $(GDS)
-	python3 $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/drc/run_drc.py --path=$(GDS) --mp=10 --run_dir=$(SIGN_DIR)/reports/ --topcell=$(TOP) --run_mode=flat --no_density --density_thr=10 --antenna
+	$(PYTHON) $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/drc/run_drc.py --path=$(GDS) --mp=10 --run_dir=$(SIGN_DIR)/reports/ --topcell=$(TOP) --run_mode=flat --no_density --density_thr=10 --antenna
 #	python3 $(SIGN_DIR)/tcl/klayout_gds_drc_check.py --gds_input_file_path $(GDS) --output_directory $(SIGN_DIR)/reports --design_name $(TOP) --drc_rules $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/drc/sg13g2_minimal.lydrc
 
 drc_magic: $(GDS)
@@ -74,8 +80,15 @@ ADC_CDLS = $(ADC_CELLS:%=$(ROOT_DIR)/cells/%.cdl)
 $(SPICE): $(ROOT_DIR)/cells/$(TECH).cdl $(ADC_CDLS) $(NET)
 	cat $(ROOT_DIR)/cells/$(TECH).cdl $(ADC_CDLS) $(NET) > $(SPICE)
 
+# Signoff LVS must run in deep (hierarchical) mode.  In flat mode the deck
+# loses ~370 devices on this design and promotes 92 NMOS to the top level, so
+# a "flat clean" report is not evidence.  lvs_flat is kept for quick iteration
+# only - never cite it as signoff.
 lvs: $(GDS) $(SPICE)
-	python3 $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/lvs/run_lvs.py --layout=$(GDS) --netlist=$(SPICE) --run_dir=$(SIGN_DIR)/reports/ --topcell=$(TOP) --run_mode=flat --verbose
+	$(PYTHON) $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/lvs/run_lvs.py --layout=$(GDS) --netlist=$(SPICE) --run_dir=$(SIGN_DIR)/reports/ --topcell=$(TOP) --run_mode=deep
+
+lvs_flat: $(GDS) $(SPICE)
+	$(PYTHON) $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/lvs/run_lvs.py --layout=$(GDS) --netlist=$(SPICE) --run_dir=$(SIGN_DIR)/reports/ --topcell=$(TOP) --run_mode=flat
 #	klayout -b -r $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/lvs/sg13g2.lvs -rd in_gds=$(GDS) -rd report_file=$(SIGN_DIR)/reports/lvs_report.lvsdb -rd cdl_file=$(SPICE) -rd target_netlist=$(SIGN_DIR)/reports/$(TOP).lay.cdl
 
 clean:

@@ -308,31 +308,112 @@ other's internals:
   `DIRECTION OUTPUT ; USE SIGNAL`.  `DPL-0033` after detailed placement is
   pre-existing golden behaviour (caught and ignored).
 
-## Detailed-route status of the MOM build (open)
-- OpenROAD DRT converges 5050 -> 51 violations and then plateaus: the
-  "stubborn tiles" rounds at iteration 30+ cost ~11 min each and oscillate
-  51 <-> 69.  `-droute_end_iter` is therefore 40, not 64, so a full P&R
-  terminates in hours instead of half a day; the leftover violations stay in
-  `pnr/reports/SARADC.drc-{5,10,...}.rpt` (iteration-numbered).
-- The 51 are two clusters, both **shorts between a routed gate net and a
-  pin**, not wire-wire crossings the router could rip up:
-  - the constant dummy gates (`dummy_{h,l}.dummy[k].CRH/CRHB`, one tie net
-    each, 6 gate pins per dummy unit x 56 units) against the cap-leaf plates
-    (`VSH/FL/VREF`) -- `Metal Spacing` 0.17 um where 0.21 is required, plus
-    `Short` where the wire clips a plate pin;
-  - `CPRE/CPREB` against `VOUTH/VOUTL` in the `sw_vouth2voutl` group next to
-    the comparator (11 of the 28 shorts), always at a pin edge: e.g.
-    (54.74,165.09)-(54.80,165.39) is the left sliver of `pgn_lz2.vdd` (a
-    1.70 x 0.30 um full-width rail), i.e. the gate wire enters the cell by
-    0.06 um.
-  Both are pin-access problems in a 0.34 um inter-leaf gap, not congestion:
-  the cap plate bars and the switch leaf's `zn` bar (0.16 x 4.24 um, full
-  height) leave one M1 corridor per leaf.
-- Consequence: GDS DRC and LVS on the current DEF will not be clean, and a
-  PEX/sim on it would include those shorts (CPRE shorted to VOUTL kills the
-  comparator).  Fix before trusting any post-layout number; the MOM leaf
-  itself is not implicated (no violation centre falls inside a cap
-  footprint).
+## Signoff DRC/LVS root causes (MOM build)
+
+The first complete MOM build reported **6791 DRC items / 23 rules** and a
+2-cell LVS mismatch. They come from exactly three root causes; all three are
+flow bugs, none of them is in the golden analog topology.
+
+### 1. Standard cells placed in the orientation of the opposite row parity
+
+OpenROAD writes N / FS rows alternately from the core margin upwards
+(`ROW_0 = N`, `ROW_1 = FS`, ...), and every instance must carry *its own*
+row's orientation. `comp_pos.tcl` was placing the fixed-position cells with
+`up -> MX` / `dw -> R0`, which is the opposite of the DEF convention
+(`MX` == DEF `FS`), so 7 instances ended up mirrored in an unmirrored row
+(or not mirrored in a mirrored row):
+
+| instance | position (um) | placed | row |
+|---|---|---|---|
+| `sg13g2f_BUFFD16` | (427.78, 159.12) | N | FS |
+| `BUFFD0` / `BUFFD2` / `TAPCELL` | (70.04 / 72.76 / 76.50, 159.12) | N | FS |
+| `BUFFD0` / `BUFFD2` / `TAPCELL` | (70.04 / 72.76 / 76.50, 165.24) | FS | N |
+
+A mirrored cell butts its NWell / pSD strip into the neighbouring row's N+
+diffusion, which produces the whole non-routing block of the report:
+`NW.a 2, NW.c 16, NW.d 46, NW.e 44, NW.f 4, pSD.d 7, pSD.e 14, pSD.f 12,
+pSD.g 3, NBL.e 9, Cnt.g1 5, Cnt.g2 4, LU.a/b` in three vertical strips at
+x ~ 18-37 / 70 / 428, y ~ 159-178 - plus, in KLayout deep LVS, 92 NMOS
+promoted to the top level (the flipped masters' devices no longer match the
+CDL).  LOCKED instances are never re-oriented by the legalizer, so this must
+be right at placement time.
+
+Fix: `comp_pos.tcl:row_orient` derives the orientation from the row index
+(`round((y-corey)/row) % 2` -> `MX`, else `R0`) instead of a direction
+heuristic, and all 8 `place_inst` calls use it.  Checked:
+`row_orient(159.12) = MX` (DEF `FS`), `row_orient(165.24) = R0`,
+`row_orient(146.88) = MX`.
+
+### 2. `tapcell -distance` is a radius, the realised pitch is ~2x it
+
+Measured on this design by dropping the inserted taps and re-running
+`tapcell` on the placed DEF (`/tmp/opencode/tap_exp.tcl`, one minute):
+
+| `-distance` | taps | realised pitch in an analog row | worst half-pitch |
+|---|---|---|---|
+| 40 (original) | 164 | 78.54 um | 39.27 |
+| 20 | 300 | 38.08 um (one row 20.06) | 19.55 |
+| 15 | 373 | 28.56 um | 14.28 |
+
+IHP's latch-up rules allow **20 um** from any diffusion to a well tie
+(`LU.a`: P+Activ in NWell -> nSD-NWell tie, `LU.b`: the N+Activ/PWell
+mirror), so `-distance 40` left up to 39 um and produced 51 `LU.a` + 48
+`LU.b` items in the analog stdcell band (y = 134.6-183.6, the only rows
+carrying logic on the analog side).  `-distance 15` gives ~14.3 um plus the
+<= 6.12 um row offset, i.e. ~15.5 um worst case.  Cost: +209 `TAPCELL`
+(2,180 um^2, 1.7 % of the analog core).
+
+### 3. The metal MOM leaf cannot take any vertical Metal2
+
+`SARADC_CAP_MOM` is pure metal: both plates (`FL` bottom, `VSH` top) span the
+full 1.85 um cell width, and the cell is only 4.21 um tall.  The MOSCAP leaf
+tolerated a vertical Metal2 rail through the cell (its gate and body are
+separate terminals); for the MOM leaf *any* vertical Metal2 rail inside the
+cell crosses both plates and merges VSH and FL into one polygon.  That is
+both the DRC source (`M2.b 3373, V1.b 1332, V1.a 1080, V2.a 360, M1.b 136,
+M2.c1 120, M3.c1 120` in the cluster region) and an electrical short: CPRE
+shorted to the bottom plate breaks the comparator.
+
+Fix in `pnr/tcl/saradc_conn.tcl`: when the leaf's terminals are `VSH`/`FL`
+(`mom_leaf`) no Metal2 is drawn at all.  Instead each net is reached with a
+horizontal **Metal3** rail laid straight over one of its own plates, with the
+Via2 array dropped into the plate (`-orthogonal_only false` is required:
+`add_vias_over_area` skips geoms whose long axis matches the stripe's, and
+the plates are horizontal like the rails):
+
+- `VSH`: one rail centred in the bottom row's VSH plate (y 3.71-4.21);
+- `FL`: one rail in the bottom FL plate (0.00-0.50) and one in the top row's
+  mirrored FL plate (7.92-8.42).
+
+Rails are 0.30 um wide (Via2 needs 0.19 cut + 0.05 endcap = 0.29) and span
+the block width, so the block's own Metal4 stripes - one per net, spanning
+the block height - pick them up with their own Via3 pass and tie the two FL
+rails together.  No Metal4 is added inside the cluster.
+
+Validated standalone before spending a 3 h P&R: `/tmp/opencode/proto/mkcap.py`
+builds a 3x2 cluster plus these rails, `run_drc.py --topcell=TESTCAP
+--run_mode=flat` reports **0 violations**, and a KLayout `LayoutToNetlist`
+connectivity run (M1/V1/M2/V2/M3/V3/M4) yields **exactly 2 nets**, i.e. VSH
+and FL are separate and each plate group is fully connected.
+
+### 4. LVS must run in deep mode
+
+`--run_mode=flat` loses ~370 devices on this design and promotes 92 NMOS to
+the top level, so "flat clean" is not evidence.  `make -C signoff lvs` now
+runs `--run_mode=deep`; `lvs_flat` remains for quick iteration only.
+
+## Detailed-route status of the MOM build
+- `-droute_end_iter` is 64.  The earlier "plateau at ~51 violations, 11 min
+  per stubborn-tile round" was a CPU-contention artefact of this shared
+  machine; the same 64-iteration budget has finished at 32 violations.  Left
+  the full budget in place now that the two clusters that used to refuse to
+  converge (the cap-leaf plate shorts and the mis-oriented cells) are fixed.
+- Remaining known weak spot: `CPRE/CPREB` against `VOUTH/VOUTL` in the
+  `sw_vouth2voutl` group next to the comparator, at pin edges (e.g. the left
+  sliver of `pgn_lz2.vdd`, a 1.70 x 0.30 um full-width rail, where a gate
+  wire enters the cell by 0.06 um).  This is a pin-access problem in a
+  0.34 um inter-leaf gap, not congestion.  Check the router report and the
+  GDS DRC for it after each P&R run.
 
 ## Hierarchical PEX target
 - `make -C signoff pex` runs `signoff/tcl/pex.tcl`: Magic per-cell extraction

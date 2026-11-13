@@ -1,3 +1,31 @@
+# Orientation a cell placed at height $y has to carry so that it is not mirrored
+# against the rest of its row.
+#
+# Rows are built from $corey upwards in $row steps and alternate.  The DEF ROW
+# declarations in this design carry the *inverse* of that alternation, though:
+# ROW_23_ANALOG_2 (y=159.12) declares MX while 62 of the 67 logic cells the
+# placer put in that band are R0, and every row is inverted in the same way
+# (checked by grouping the pre-route DEF components by their y and taking the
+# majority orientation per row).  pos_stdcell_box has always followed the
+# placer's convention (R0 on the first row it fills, then alternating) and its
+# cells are the ones with no DRC cluster, so mirror the placer here: counted
+# from $corey, odd rows are R0 and even rows are MX.
+#
+# A cell mirrored against its neighbours butts its NWell / pSD strip against
+# their N+ diffusion, which is the NW.*/pSD.*/NBL.*/Cnt.* block of the DRC
+# report and, in KLayout deep LVS, promotes the flipped master's devices to the
+# top level.  LOCKED instances are never re-oriented by the legalizer, so this
+# has to be right at placement time.
+proc row_orient {y} {
+  global row
+  global corey
+  if {[expr {round(($y-$corey)/$row)} % 2] == 0} {
+    return "MX"
+  } else {
+    return "R0"
+  }
+}
+
 proc filter_by_regex {pattern lst} {
     set result {}
     foreach item $lst {
@@ -39,27 +67,28 @@ proc pos_stdcell_comp {x y path} {
     set up_sizex [::ord::dbu_to_microns [[$up_obj getMaster] getWidth]]
     set dw_sizex [::ord::dbu_to_microns [[$dw_obj getMaster] getWidth]]
 
-    # TODO: The R0 and MX maybe needs to be deduced from the site
+    # The n-side pair sits in the row at $dwy and the p-side pair one row up;
+    # those two rows have opposite orientations, so the pair stays mirror
+    # symmetric about the shared row edge.  Each cell carries the orientation
+    # the placer uses for its own row (see row_orient).
     if {[[$::block findInst $up_inst] isPlaced] == 0} {
-      # puts "place_inst -name \[list $up_inst\] -location \"$upx $upy\" -orientation MX -status LOCKED"
-      place_inst -name $up_inst -location "$upx $upy" -orientation MX -status LOCKED
+      place_inst -name $up_inst -location "$upx $upy" -orientation [row_orient $upy] -status LOCKED
     }
     if {[[$::block findInst $dw_inst] isPlaced] == 0} {
-      # puts "place_inst -name \[list $dw_inst\] -location \"$dwx $dwy\" -orientation R0 -status LOCKED"
-      place_inst -name $dw_inst -location "$dwx $dwy" -orientation R0 -status LOCKED
+      place_inst -name $dw_inst -location "$dwx $dwy" -orientation [row_orient $dwy] -status LOCKED
     }
     set upx [expr $upx + $up_sizex]
     set dwx [expr $dwx + $dw_sizex]
     if {[expr $upx+$up_sizex-$tapx] > 40 } {
-      place_inst -name tapcell_up_inst_$i -cell sg13g2f_TAPCELL -location "$upx $upy" -orientation MX -status LOCKED
-      place_inst -name tapcell_dw_inst_$i -cell sg13g2f_TAPCELL -location "$dwx $dwy" -orientation R0 -status LOCKED
+      place_inst -name tapcell_up_inst_$i -cell sg13g2f_TAPCELL -location "$upx $upy" -orientation [row_orient $upy] -status LOCKED
+      place_inst -name tapcell_dw_inst_$i -cell sg13g2f_TAPCELL -location "$dwx $dwy" -orientation [row_orient $dwy] -status LOCKED
       set upx [expr $upx + [::ord::dbu_to_microns [[[$::block findInst tapcell_up_inst_$i] getBBox] getDX]]]
       set dwx [expr $dwx + [::ord::dbu_to_microns [[[$::block findInst tapcell_dw_inst_$i] getBBox] getDX]]]
       set tapx $upx
     }
   }
-  place_inst -name tapcell_up_inst_$n -cell sg13g2f_TAPCELL -location "$upx $upy" -orientation MX -status LOCKED
-  place_inst -name tapcell_dw_inst_$n -cell sg13g2f_TAPCELL -location "$dwx $dwy" -orientation R0 -status LOCKED
+  place_inst -name tapcell_up_inst_$n -cell sg13g2f_TAPCELL -location "$upx $upy" -orientation [row_orient $upy] -status LOCKED
+  place_inst -name tapcell_dw_inst_$n -cell sg13g2f_TAPCELL -location "$dwx $dwy" -orientation [row_orient $dwy] -status LOCKED
   
   set compx [expr $upx - $x]
   set compy [expr 2*$row]

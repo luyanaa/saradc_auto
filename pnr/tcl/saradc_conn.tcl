@@ -235,12 +235,17 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set vsh_i_lly [expr 1.0*[[lindex $cap_ipin_shapes 0] yMin] / $dbu]
     set vsh_i_llx [expr 1.0*[[lindex $cap_ipin_shapes 0] xMin] / $dbu]
     set vsh_i_urx [expr 1.0*[[lindex $cap_ipin_shapes 0] xMax] / $dbu]
+    set vsh_i_ury [expr 1.0*[[lindex $cap_ipin_shapes 0] yMax] / $dbu]
     foreach sp $cap_ipin_shapes {
       set lly [expr 1.0*[$sp yMin] / $dbu]
+      set ury [expr 1.0*[$sp yMax] / $dbu]
       set llx [expr 1.0*[$sp xMin] / $dbu]
       set urx [expr 1.0*[$sp xMax] / $dbu]
       if {$lly < $vsh_i_lly} {
         set vsh_i_lly $lly
+      }
+      if {$ury > $vsh_i_ury} {
+        set vsh_i_ury $ury
       }
       if {$llx < $vsh_i_llx} {
         set vsh_i_llx $llx
@@ -250,6 +255,13 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       }
     }
     set vsh_lly [expr $cap_lly+$vsh_i_lly]
+    # The metal MOM leaf (VSH/FL) has no body terminal, and its two plates
+    # span the whole cell width: one vertical Metal2 rail anywhere inside the
+    # cell merges VSH and FL into a single polygon, which shorts CPRE and
+    # breaks the comparator.  For that leaf the nets are therefore reached
+    # with Metal3 rails laid straight over their own plate (see the
+    # "Connect the nets from the capacitor" block) and no Metal2 is added.
+    set mom_leaf [expr {$cap_i_name eq "VSH"}]
     
     # Extract the FL net, attached mainly to ZN
     set cap_znipin [$cap_instobj findITerm $cap_zn_name]
@@ -258,9 +270,19 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     set cap_znpin_shapes [$cap_znpin getGeometry]
     set fl_zn_llx [expr 1.0*[[lindex $cap_znpin_shapes 0] xMin] / $dbu]
     set fl_zn_urx [expr 1.0*[[lindex $cap_znpin_shapes 0] xMax] / $dbu]
+    set fl_zn_lly [expr 1.0*[[lindex $cap_znpin_shapes 0] yMin] / $dbu]
+    set fl_zn_ury [expr 1.0*[[lindex $cap_znpin_shapes 0] yMax] / $dbu]
     foreach sp $cap_znpin_shapes {
+      set lly [expr 1.0*[$sp yMin] / $dbu]
+      set ury [expr 1.0*[$sp yMax] / $dbu]
       set llx [expr 1.0*[$sp xMin] / $dbu]
       set urx [expr 1.0*[$sp xMax] / $dbu]
+      if {$lly < $fl_zn_lly} {
+        set fl_zn_lly $lly
+      }
+      if {$ury > $fl_zn_ury} {
+        set fl_zn_ury $ury
+      }
       if {$llx < $fl_zn_llx} {
         set fl_zn_llx $llx
       }
@@ -353,7 +375,7 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set x2 [expr $inst_llx + $zncx2]
       set y1 [expr $inst_lly + $vssdy]
       set y2 [expr $inst_lly + $vdduy]
-      if {$znnet == $vsh_name} {
+      if {!$mom_leaf && $znnet == $vsh_name} {
         set y1 $vsh_lly
       }
       set area "$x1 $y1 $x2 $y2"
@@ -366,7 +388,7 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
       set x2 [expr $inst_llx + $znnx2]
       set y1 [expr $inst_lly + $vssdy]
       set y2 [expr $inst_lly + $vdduy]
-      if {$znnet != $vsh_name} {
+      if {!$mom_leaf && $znnet != $vsh_name} {
         set y1 $vsh_lly
       }
       set area "$x1 $y1 $x2 $y2"
@@ -375,61 +397,68 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
         -start_from left -start_offset 0 -area $area
     }
     
-    # Assuming that ZN extends more than I, we draw ZN then I
-    # Two ZN Rail vertical (A.K.A. FL)
-    set x1 [expr $cap_llx + $fl_zn_llx]
-    set x2 [expr $cap_llx + $fl_zn_llx + $metal2_w]
-    set y1 [expr $cap_powu_lly]
-    set y2 [expr $inst_ury - $abutsizey/2.0]
-    #set y2 [expr $cap_powu_ury]
-    set area "$x1 $y1 $x2 $y2"
-    addStripe -nets $fl_name -layer $metal2 -direction vertical \
-      -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
-      -start_from left -start_offset 0 -area $area
-    set x1 [expr $capu_llx + $fl_zn_urx - $metal2_w]
-    set x2 [expr $capu_llx + $fl_zn_urx]
-    set area "$x1 $y1 $x2 $y2"
-    addStripe -nets $fl_name -layer $metal2 -direction vertical \
-      -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
-      -start_from left -start_offset 0 -area $area
-    # We need to connect the ZN for the middle caps
-    for {set l 1} {$l < [expr $pw-1]} {incr l} {
-      set cap_indexm [expr $ind*$pw*$ph+$l]
-      set cap_instm "$path.cap\\\[${cap_indexm}\\\].cap/impl"
-      set cap_instobjm [$::block findInst $cap_instm]
-      set capm_llx [expr 1.0*[[$cap_instobjm getBBox] xMin] / $dbu]
-      set capm_lly [expr 1.0*[[$cap_instobjm getBBox] yMin] / $dbu]
-      set x1 [expr $capm_llx + $fl_zn_llx]
-      set x2 [expr $capm_llx + $fl_zn_llx + $metal2_w]
+    # The MOSCAP leaf ties its gate and body separately, so a Metal2 rail
+    # can run through the cell.  The metal MOM leaf cannot: its plates are
+    # full width, so every vertical Metal2 rail shorts VSH to FL.  For that
+    # leaf the nets are reached from the Metal3 rails below instead.
+    if {!$mom_leaf} {
+      # Assuming that ZN extends more than I, we draw ZN then I
+      # Two ZN Rail vertical (A.K.A. FL)
+      set x1 [expr $cap_llx + $fl_zn_llx]
+      set x2 [expr $cap_llx + $fl_zn_llx + $metal2_w]
       set y1 [expr $cap_powu_lly]
-      set y2 [expr $cap_powu_ury]
+      set y2 [expr $inst_ury - $abutsizey/2.0]
+      #set y2 [expr $cap_powu_ury]
       set area "$x1 $y1 $x2 $y2"
       addStripe -nets $fl_name -layer $metal2 -direction vertical \
         -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
         -start_from left -start_offset 0 -area $area
-      set x1 [expr $capm_llx + $fl_zn_urx - $metal2_w]
-      set x2 [expr $capm_llx + $fl_zn_urx]
+      set x1 [expr $capu_llx + $fl_zn_urx - $metal2_w]
+      set x2 [expr $capu_llx + $fl_zn_urx]
       set area "$x1 $y1 $x2 $y2"
       addStripe -nets $fl_name -layer $metal2 -direction vertical \
+        -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
+        -start_from left -start_offset 0 -area $area
+      # We need to connect the ZN for the middle caps
+      for {set l 1} {$l < [expr $pw-1]} {incr l} {
+        set cap_indexm [expr $ind*$pw*$ph+$l]
+        set cap_instm "$path.cap\\\[${cap_indexm}\\\].cap/impl"
+        set cap_instobjm [$::block findInst $cap_instm]
+        set capm_llx [expr 1.0*[[$cap_instobjm getBBox] xMin] / $dbu]
+        set capm_lly [expr 1.0*[[$cap_instobjm getBBox] yMin] / $dbu]
+        set x1 [expr $capm_llx + $fl_zn_llx]
+        set x2 [expr $capm_llx + $fl_zn_llx + $metal2_w]
+        set y1 [expr $cap_powu_lly]
+        set y2 [expr $cap_powu_ury]
+        set area "$x1 $y1 $x2 $y2"
+        addStripe -nets $fl_name -layer $metal2 -direction vertical \
+          -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
+          -start_from left -start_offset 0 -area $area
+        set x1 [expr $capm_llx + $fl_zn_urx - $metal2_w]
+        set x2 [expr $capm_llx + $fl_zn_urx]
+        set area "$x1 $y1 $x2 $y2"
+        addStripe -nets $fl_name -layer $metal2 -direction vertical \
+          -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
+          -start_from left -start_offset 0 -area $area
+      }
+      # Two I Rail vertical (AKA VSH)
+      set x1 [expr $cap_llx + $vsh_i_llx]
+      set x2 [expr $cap_llx + $vsh_i_llx + $metal2_w]
+      set y1 [expr $cap_powu_lly]
+      set y2 [expr $inst_ury - $abutsizey/2.0]
+      #set y2 [expr $cap_powu_ury]
+      set area "$x1 $y1 $x2 $y2"
+      addStripe -nets $vsh_name -layer $metal2 -direction vertical \
+        -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
+        -start_from left -start_offset 0 -area $area
+      set x1 [expr $capu_llx + $vsh_i_urx - $metal2_w]
+      set x2 [expr $capu_llx + $vsh_i_urx]
+      set area "$x1 $y1 $x2 $y2"
+      addStripe -nets $vsh_name -layer $metal2 -direction vertical \
         -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
         -start_from left -start_offset 0 -area $area
     }
-    # Two I Rail vertical (AKA VSH)
-    set x1 [expr $cap_llx + $vsh_i_llx]
-    set x2 [expr $cap_llx + $vsh_i_llx + $metal2_w]
-    set y1 [expr $cap_powu_lly]
-    set y2 [expr $inst_ury - $abutsizey/2.0]
-    #set y2 [expr $cap_powu_ury]
-    set area "$x1 $y1 $x2 $y2"
-    addStripe -nets $vsh_name -layer $metal2 -direction vertical \
-      -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
-      -start_from left -start_offset 0 -area $area
-    set x1 [expr $capu_llx + $vsh_i_urx - $metal2_w]
-    set x2 [expr $capu_llx + $vsh_i_urx]
-    set area "$x1 $y1 $x2 $y2"
-    addStripe -nets $vsh_name -layer $metal2 -direction vertical \
-      -width [expr $x2 - $x1] -spacing 0.0 -set_to_set_distance 1.0 \
-      -start_from left -start_offset 0 -area $area
+
     # NOTE: As for the middle cap... we hope the switch connect it. Crossing fingers xoxo
     
     setAddStripeMode -orthogonal_only true
@@ -501,18 +530,61 @@ proc create_sw_cap_conn {x y pos lst pw ph sizex sizey strip} {
     # Connect the nets from the capacitor
     set all_capnets [list $vsh_name $fl_name]
     set nall_capnets [llength $all_capnets]
-    set capspan [expr ($nall_capnets-1) * $metal3_py*2 + $metal3_w]
-    set capst [expr $cap_lly+(($capu_ury-$cap_lly) - $capspan)/2.0]
-    for {set i 0} {$i < $nall_capnets} {incr i} {
-      set net [lindex $all_capnets $i]
-      set x1 [expr $x + ($pi)*$sizex + $marginl]
-      set x2 [expr $x + ($pi+1)*$sizex - $marginr]
-      set y1 [expr $capst + $i*$metal3_py*2]
-      set y2 [expr $capst + $i*$metal3_py*2 + $metal3_w]
-      set area "$x1 $y1 $x2 $y2"
-      addStripe -nets $net -layer $metal3 -direction horizontal \
-        -width [expr $y2 - $y1] -spacing 0.0 -set_to_set_distance 1.0 \
-        -start_from bottom -start_offset 0 -area $area
+    if {$mom_leaf} {
+      # The two plates of the metal MOM leaf are horizontal full-width strips,
+      # so a Metal3 rail laid right over a plate can drop a Via2 array into it
+      # without touching the other net.  VSH gets one rail in the bottom row's
+      # VSH plate; FL gets one rail in each of its plates (the top row is
+      # FS-mirrored, so its FL plate sits at the top of the cluster).
+      #
+      # -orthogonal_only false is required: add_vias_over_area skips a geometry
+      # whose long axis matches the stripe's, and these plates are horizontal
+      # just like the rails.
+      #
+      # Both rails run the full block width, so the block's own Metal4 stripes
+      # (added by the second pass below, one per net, spanning the block
+      # height) drop their Via3 arrays straight onto them and tie the two FL
+      # rails together.  No Metal2 is added anywhere in the cluster, which is
+      # what used to short the plates; and no extra Metal4 strap is needed
+      # either, so the cluster adds no Metal4 geometry at all.
+      set cap_rail_w [expr max($metal3_w, 0.30)]
+      set vsh_ph [expr $vsh_i_ury - $vsh_i_lly]
+      set fl_ph [expr $fl_zn_ury - $fl_zn_lly]
+      set vsh_rail_y [expr $cap_lly + $vsh_i_lly + $vsh_ph/2.0]
+      set fl_rail_lo [expr $cap_lly + $fl_zn_lly + $fl_ph/2.0]
+      set fl_rail_hi [expr $capu_ury - $fl_ph/2.0]
+      set cap_rails [list \
+        [list $vsh_name $vsh_rail_y] \
+        [list $fl_name  $fl_rail_lo] \
+        [list $fl_name  $fl_rail_hi]]
+      setAddStripeMode -orthogonal_only false
+      foreach cr $cap_rails {
+        set net [lindex $cr 0]
+        set yc [lindex $cr 1]
+        set x1 [expr $x + ($pi)*$sizex + $marginl]
+        set x2 [expr $x + ($pi+1)*$sizex - $marginr]
+        set y1 [expr $yc - $cap_rail_w/2.0]
+        set y2 [expr $yc + $cap_rail_w/2.0]
+        set area "$x1 $y1 $x2 $y2"
+        addStripe -nets $net -layer $metal3 -direction horizontal \
+          -width [expr $y2 - $y1] -spacing 0.0 -set_to_set_distance 1.0 \
+          -start_from bottom -start_offset 0 -area $area
+      }
+      setAddStripeMode -orthogonal_only true
+    } else {
+      set capspan [expr ($nall_capnets-1) * $metal3_py*2 + $metal3_w]
+      set capst [expr $cap_lly+(($capu_ury-$cap_lly) - $capspan)/2.0]
+      for {set i 0} {$i < $nall_capnets} {incr i} {
+        set net [lindex $all_capnets $i]
+        set x1 [expr $x + ($pi)*$sizex + $marginl]
+        set x2 [expr $x + ($pi+1)*$sizex - $marginr]
+        set y1 [expr $capst + $i*$metal3_py*2]
+        set y2 [expr $capst + $i*$metal3_py*2 + $metal3_w]
+        set area "$x1 $y1 $x2 $y2"
+        addStripe -nets $net -layer $metal3 -direction horizontal \
+          -width [expr $y2 - $y1] -spacing 0.0 -set_to_set_distance 1.0 \
+          -start_from bottom -start_offset 0 -area $area
+      }
     }
   }
   setAddStripeMode -reset

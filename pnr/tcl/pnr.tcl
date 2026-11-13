@@ -694,11 +694,29 @@ if {$clkbuf_inst eq ""} {
   error "pnr: clock buffer analog/buflogic.*conv.smpcs.clkbuf.impl not found"
 }
 puts "\[Place\] clock buffer: $clkbuf_inst"
-place_inst -name $clkbuf_inst -location "[expr $dig_to_ana-$sizetap-21.76] $posy_sw" -orientation R0 -status LOCKED
+# The buffer lands in the row at $posy_sw.  Rows are built from $corey upwards
+# in $row steps and alternate, but the DEF ROW declarations are inverted with
+# respect to the orientation the placer gives its cells, so derive the
+# orientation with row_orient instead of guessing: a LOCKED cell is never
+# re-oriented by the legalizer, and a cell mirrored against its row mates pushes
+# its NWell/PSD strips into their diffusion, which butts a P+ sliver against
+# N+ (DRC NW.*/pSD.*/LU.*, and KLayout deep LVS then promotes the master's
+# devices to the top level).
+set clkbuf_orient [row_orient $posy_sw]
+place_inst -name $clkbuf_inst -location "[expr $dig_to_ana-$sizetap-21.76] $posy_sw" -orientation $clkbuf_orient -status LOCKED
 
 ## Tapcell insertion
+# -distance 15, not the original 40.  OpenROAD realises the requested distance
+# as a tap *pitch* of about 2x the value snapped down to whole sites (measured
+# on this design: -distance 40 -> realised pitch 78.54 um), so -distance 40
+# left up to ~39 um from a diffusion to the nearest well tie.  IHP's latch-up
+# rules allow 20 um (LU.a "max space from P+Activ in NWell to an nSD-NWell
+# tie", LU.b the same for N+Activ in PWell), which is why the MOM build
+# reported 51 LU.a + 48 LU.b items in the analog stdcell band.  -distance 15
+# gives a realised pitch of ~28.6 um, i.e. <= 14.3 um plus the <= 6.12 um row
+# offset, comfortably inside 20 um.
 tapcell \
-    -distance 40 \
+    -distance 15 \
     -endcap_master "$TAPCells" \
     -tapcell_master "$TAPCells"
 
@@ -976,15 +994,15 @@ set_thread_count 10
 set all_args [concat [list \
   -output_drc $PNR_DIR/reports/${TOP}.drc \
   -output_maze $PNR_DIR/reports/${TOP}_maze.log \
-  -droute_end_iter 40 \
+  -droute_end_iter 64 \
   -verbose 1 \
   -drc_report_iter_step 5]]
 
-# 40, not 64: the MOM build plateaus at ~51 violations around iteration 30
-# (the "stubborn tiles" rounds then cost ~11 minutes each without improving
-# the count), so an unbounded run spends hours to write the same DEF.  40
-# bounds a full P&R to a few hours; the leftover violations are recorded in
-# reports/SARADC.drc-*.rpt, not silently dropped.
+# 64 iterations: the earlier "plateau at ~51" was a CPU-contention artefact on
+# this shared machine (a rerun finished at 32 with the same 64-iteration
+# budget).  Fixed device orientations and the MOM cap escape remove the two
+# clusters that used to refuse to converge, so let TritonRoute use its full
+# default budget instead of truncating it.
 
 puts stderr "\[Flow\] detailed_route"
 detailed_route {*}$all_args
@@ -1027,7 +1045,8 @@ puts stderr "\[Flow\] detailed_route done"
 # without set_default_switching_activity does not abort the flow after routing.
 puts stderr "\[Flow\] report_power"
 if {[catch {
-  set_default_switching_activity -input_activity 0.1 -seq_activity 0.1
+  # -global needs a defined clock, which the SDC has created by now.
+  set_power_activity -global -activity 0.1
   report_power > $PNR_DIR/reports/${TOP}_power.rpt
 } errmsg]} {
   puts stderr "\[Flow\] report_power failed: $errmsg"
